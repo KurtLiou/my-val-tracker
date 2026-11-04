@@ -119,6 +119,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/autostart":
             return self._json({"enabled": autostart.enabled(), "windows": os.name == "nt"})
 
+        if path == "/api/buddy/skin":
+            cfg = store.settings()
+            return self._json({"skin": cfg["buddy_skin"], "size": cfg["buddy_size"], "files": store.buddy_images()})
+
+        if path.startswith("/custom-buddy/"):
+            from urllib.parse import unquote
+            return _file(self, store.BUDDY_IMG_DIR, unquote(path[len("/custom-buddy/"):]))
+
         if path == "/api/buddy/state":
             return self._json(buddy.state())
 
@@ -192,6 +200,13 @@ class Handler(BaseHTTPRequestHandler):
             buddy.preview(PORT)
             return self._json({"ok": True})
 
+        if path == "/api/buddy/setup":  # 調整位置模式
+            if body.get("reset"):
+                store.save_settings({"buddy_x": None, "buddy_y": None})
+                return self._json({"ok": True})
+            buddy.open_setup(PORT)
+            return self._json({"ok": True})
+
         if path == "/api/buddy/test":
             return self._json(buddy.one_cycle())
 
@@ -220,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"path": out})
 
         if path == "/api/open-folder":
-            folder = store.AGENT_IMG_DIR if body.get("which") == "agents" else PICTURES
+            folder = {"agents": store.AGENT_IMG_DIR, "buddy": store.BUDDY_IMG_DIR}.get(body.get("which"), PICTURES)
             os.makedirs(folder, exist_ok=True)
             if os.name == "nt":
                 os.startfile(folder)

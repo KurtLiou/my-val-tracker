@@ -1,6 +1,6 @@
 {
-  "version": "3.3.0",
-  "notes": "新增對戰陪伴啾啾：對戰時在右下角陪你、看畫面給鼓勵和安慰",
+  "version": "3.4.0",
+  "notes": "陪伴角色可以換：新增 3 位原創動漫風女孩＋自訂圖片；可調整位置和大小",
   "files": [
     "README.md",
     "app.py",
@@ -17,6 +17,7 @@
     "static/buddy.html",
     "static/index.html",
     "static/lineups.json",
+    "static/skins.js",
     "static/style.css",
     "stats.py",
     "store.py",

@@ -33,7 +33,8 @@ SETTINGS_PATH = os.path.join(ROOT, "settings.json")
 DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_count": 40,
                     "update_repo": "", "auto_sync": True, "show_enemies": True,
                     "buddy_enabled": True, "buddy_provider": "none", "buddy_key": "", "buddy_model": "",
-                    "buddy_interval": 20, "buddy_clickthrough": True}
+                    "buddy_interval": 20, "buddy_clickthrough": True,
+                    "buddy_skin": "jiujiu", "buddy_size": "m", "buddy_x": None, "buddy_y": None}
 
 
 def settings():
@@ -43,7 +44,7 @@ def settings():
 def save_settings(new):
     cur = settings()
     for k in DEFAULT_SETTINGS:
-        if k in new and new[k] is not None:
+        if k in new and (new[k] is not None or k in ("buddy_x", "buddy_y")):
             cur[k] = new[k]
     cur["sync_count"] = max(5, min(150, int(cur.get("sync_count") or 40)))
     cur["update_repo"] = str(cur.get("update_repo") or "").strip().strip("/")
@@ -52,6 +53,12 @@ def save_settings(new):
     cur["buddy_enabled"] = bool(cur.get("buddy_enabled"))
     cur["buddy_clickthrough"] = bool(cur.get("buddy_clickthrough"))
     cur["buddy_interval"] = max(10, min(120, int(cur.get("buddy_interval") or 20)))
+    if cur.get("buddy_skin") not in ("jiujiu", "hoshina", "rinne", "wakaba", "custom"):
+        cur["buddy_skin"] = "jiujiu"
+    if cur.get("buddy_size") not in ("s", "m", "l"):
+        cur["buddy_size"] = "m"
+    for k in ("buddy_x", "buddy_y"):
+        cur[k] = int(cur[k]) if isinstance(cur.get(k), (int, float)) else None
     if cur.get("buddy_provider") not in ("none", "gemini", "claude"):
         cur["buddy_provider"] = "none"
     _write(SETTINGS_PATH, cur)
@@ -162,4 +169,14 @@ os.makedirs(AGENT_IMG_DIR, exist_ok=True)
 
 def custom_agent_images():
     return sorted(f for f in os.listdir(AGENT_IMG_DIR)
+                  if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")))
+
+
+# ---------- 對戰陪伴的自訂圖片（放在 %USERPROFILE%\.valtracker\buddy） ----------
+BUDDY_IMG_DIR = os.path.join(ROOT, "buddy")
+os.makedirs(BUDDY_IMG_DIR, exist_ok=True)
+
+
+def buddy_images():
+    return sorted(f for f in os.listdir(BUDDY_IMG_DIR)
                   if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")))

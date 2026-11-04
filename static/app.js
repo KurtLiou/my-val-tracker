@@ -810,6 +810,21 @@ async function pageSettings(el) {
       </div>
     </div>
     <div class="card section buddy-card"><h3>🐣 對戰陪伴啾啾 <span class="hint">對戰時在右下角陪你，只給鼓勵，不給戰術</span></h3>
+      <h4 style="margin:4px 0 10px">選角色</h4>
+      <div class="skins">${Object.entries(window.SKINS || {}).map(([id, sk]) => `<button class="skin ${id === (cfg.buddy_skin || "jiujiu") ? "on" : ""}" data-skin="${id}">
+          <div class="skin-art">${sk.svg ? sk.svg("happy") : "🖼️"}</div><b>${esc(sk.name)}</b><small>${esc(sk.desc)}</small></button>`).join("")}</div>
+      <div class="skin-moods" id="skinMoods"></div>
+      <div id="customHelp" class="muted" style="font-size:13px;margin:8px 0;display:none">
+        把圖片放進自訂資料夾，檔名用情緒命名：<b>happy.png</b>（平常）、<b>wow.png</b>（驚喜）、<b>sad.png</b>（難過）、<b>cheer.png</b>（加油）。
+        只放一張 happy.png 也可以，背景透明的 PNG 最好看。
+        <button class="btn ghost" id="bFolder" style="margin-left:6px">📂 打開自訂圖片資料夾</button></div>
+      <div class="row" style="margin:14px 0 6px">
+        <span class="muted" style="font-size:13px">大小</span>
+        <div class="chips">${[["s", "小"], ["m", "中"], ["l", "大"]].map(([v, t]) => `<button class="chip ${v === (cfg.buddy_size || "m") ? "on" : ""}" data-size="${v}">${t}</button>`).join("")}</div>
+        <span class="muted" style="font-size:13px;margin-left:12px">位置</span>
+        <button class="btn ghost" id="bPos">📍 調整位置</button>
+        ${cfg.buddy_pos_set ? `<button class="btn ghost" id="bPosReset">↩ 回到右下角</button>` : ""}
+      </div>
       <div class="grid g2">
         <div>
           <label class="switch"><input type="checkbox" id="bOn" ${cfg.buddy_enabled !== false ? "checked" : ""}><span></span>
@@ -873,6 +888,33 @@ async function pageSettings(el) {
   };
   if ($("#sApply")) $("#sApply").onclick = applyUpdate;
   $("#bProv").value = cfg.buddy_provider || "none";
+  let skinSel = cfg.buddy_skin || "jiujiu", sizeSel = cfg.buddy_size || "m";
+  const drawMoods = () => {
+    const sk = window.SKINS?.[skinSel];
+    $("#customHelp", el).style.display = skinSel === "custom" ? "block" : "none";
+    $("#skinMoods", el).innerHTML = sk?.svg ? [["happy", "平常"], ["wow", "驚喜"], ["sad", "難過"], ["cheer", "加油"]]
+      .map(([m, t]) => `<div><div class="skin-art sm">${sk.svg(m)}</div><small>${t}</small></div>`).join("") : "";
+  };
+  drawMoods();
+  el.querySelectorAll("[data-skin]").forEach((b) => b.onclick = async () => {
+    skinSel = b.dataset.skin;
+    el.querySelectorAll("[data-skin]").forEach((x) => x.classList.toggle("on", x === b));
+    drawMoods();
+    await api("/api/settings", { buddy_skin: skinSel });
+    toast(`已換成「${window.SKINS[skinSel].name}」✓`);
+  });
+  el.querySelectorAll("[data-size]").forEach((b) => b.onclick = async () => {
+    sizeSel = b.dataset.size;
+    el.querySelectorAll("[data-size]").forEach((x) => x.classList.toggle("on", x === b));
+    await api("/api/settings", { buddy_size: sizeSel });
+    toast("大小已儲存 ✓（下次出現時生效）");
+  });
+  $("#bFolder", el).onclick = () => api("/api/open-folder", { which: "buddy" }).then((r) => toast("資料夾：" + r.path, 4000));
+  $("#bPos", el).onclick = async () => {
+    try { await api("/api/buddy/setup", {}); alertBox("角色出現了！把它<b>拖到想要的位置</b>，再按左上角的「✓ 完成」。<br><span class='faint'>拖的時候暫時不會滑鼠穿透。</span>"); }
+    catch (e) { toast(e.message, 4000); }
+  };
+  if ($("#bPosReset", el)) $("#bPosReset", el).onclick = async () => { await api("/api/buddy/setup", { reset: true }); toast("已回到右下角 ✓"); pageSettings(el); };
   const saveBuddy = async () => {
     const body = { buddy_enabled: $("#bOn").checked, buddy_clickthrough: $("#bClick").checked,
       buddy_interval: +$("#bInt").value, buddy_provider: $("#bProv").value, buddy_model: $("#bModel").value.trim() };

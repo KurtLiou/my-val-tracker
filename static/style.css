@@ -344,3 +344,15 @@ svg text { font-family: var(--font); }
 
 .buddy-card { background: linear-gradient(135deg, rgba(169,139,255,.12), var(--card) 60%); }
 .field select { background: var(--bg2); border: 1px solid var(--line); color: var(--text); padding: 10px 12px; border-radius: 12px; font: inherit; }
+
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.skin { border: 2px solid var(--line); background: var(--card2); border-radius: 16px; padding: 10px 8px; cursor: pointer; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; transition: .15s; font: inherit; }
+.skin:hover { transform: translateY(-2px); }
+.skin.on { border-color: var(--lilac); background: rgba(169,139,255,.16); }
+.skin small { color: var(--faint); font-size: 11px; text-align: center; }
+.skin-art { width: 84px; height: 84px; display: grid; place-items: center; font-size: 40px; }
+.skin-art svg { width: 100%; height: 100%; }
+.skin-art.sm { width: 64px; height: 64px; }
+.skin-moods { display: flex; gap: 14px; margin-top: 12px; }
+.skin-moods > div { text-align: center; color: var(--faint); font-size: 11px; }

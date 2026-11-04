@@ -31,6 +31,7 @@ def status():
             "buddy_enabled": s["buddy_enabled"], "buddy_provider": s["buddy_provider"],
             "buddy_key_set": bool(s["buddy_key"]), "buddy_model": s["buddy_model"],
             "buddy_interval": s["buddy_interval"], "buddy_clickthrough": s["buddy_clickthrough"],
+            "buddy_skin": s["buddy_skin"], "buddy_size": s["buddy_size"], "buddy_pos_set": s["buddy_x"] is not None,
         },
     }
 

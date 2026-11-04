@@ -231,6 +231,12 @@ def end_match(won=None):
         say("辛苦了，下一場一定贏 💕", "sad")
 
 
+def open_setup(port=None):
+    import autostart
+    subprocess.Popen(autostart._launch_cmd("--buddy", "--setup", f"--port={port or _app_port()}"),
+                     creationflags=NO_WINDOW if os.name == "nt" else 0, close_fds=True)
+
+
 def preview(port=None, seconds=45):
     _ensure_loop()
     with _lock:
@@ -267,24 +273,42 @@ def window_main():
     import webview
 
     port = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--port=")), "8787")
-    w, h = 300, 230
-    x = y = None
-    if os.name == "nt":
+    setup = "--setup" in sys.argv
+    cfg = store.settings()
+    k = {"s": 0.8, "m": 1.0, "l": 1.3}.get(cfg.get("buddy_size"), 1.0)
+    w, h = int(300 * k), int(240 * k)
+    x, y = cfg.get("buddy_x"), cfg.get("buddy_y")
+    if (x is None or y is None) and os.name == "nt":
         import ctypes
         sw, sh = ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)
         x, y = sw - w - 24, sh - h - 70
+    title = TITLE + ("（調整位置）" if setup else "")
+    holder = {}
+
+    class Api:
+        def save_position(self):  # 調整位置模式按「完成」
+            win = holder["win"]
+            store.save_settings({"buddy_x": int(win.x), "buddy_y": int(win.y)})
+            win.destroy()
+
     kwargs = dict(width=w, height=h, x=x, y=y, frameless=True, on_top=True, resizable=False,
-                  transparent=True, background_color="#0e1220", easy_drag=False, focus=False)
-    url = f"http://127.0.0.1:{port}/static/buddy.html"
+                  transparent=True, background_color="#0e1220", easy_drag=False, focus=setup,
+                  js_api=Api())
+    url = f"http://127.0.0.1:{port}/static/buddy.html" + ("?setup=1" if setup else "")
     try:
-        win = webview.create_window(TITLE, url, **kwargs)
+        win = webview.create_window(title, url, **kwargs)
     except TypeError:  # 舊版 pywebview 沒有某些參數
-        for k in ("focus", "transparent", "easy_drag"):
-            kwargs.pop(k, None)
-        win = webview.create_window(TITLE, url, **kwargs)
+        for key in ("focus", "transparent", "easy_drag"):
+            kwargs.pop(key, None)
+        win = webview.create_window(title, url, **kwargs)
+    holder["win"] = win
 
     def watcher():
-        _make_click_through(TITLE, store.settings().get("buddy_clickthrough", True))
+        if setup:  # 調整位置時不穿透，才拖得動；最多開 3 分鐘
+            time.sleep(180)
+            win.destroy()
+            return
+        _make_click_through(title, store.settings().get("buddy_clickthrough", True))
         idle = 0
         while True:  # 對戰結束（或主程式關掉）就自己關
             time.sleep(3)
