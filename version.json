@@ -1,10 +1,11 @@
 {
-  "version": "3.2.0",
-  "notes": "設定頁新增「在桌面建立捷徑」按鈕",
+  "version": "3.3.0",
+  "notes": "新增對戰陪伴啾啾：對戰時在右下角陪你、看畫面給鼓勵和安慰",
   "files": [
     "README.md",
     "app.py",
     "autostart.py",
+    "buddy.py",
     "demo.py",
     "diagnose.py",
     "henrik.py",
@@ -13,6 +14,7 @@
     "riot.py",
     "service.py",
     "static/app.js",
+    "static/buddy.html",
     "static/index.html",
     "static/lineups.json",
     "static/style.css",

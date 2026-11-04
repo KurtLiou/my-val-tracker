@@ -24,6 +24,7 @@ PORT = 8787  # 實際用的 port 在 main() 決定（被佔用就換一個）
 ORIGIN = f"http://127.0.0.1:{PORT}"
 
 import autostart  # noqa: E402
+import buddy  # noqa: E402
 import store  # noqa: E402
 import stats  # noqa: E402
 import updater  # noqa: E402
@@ -118,6 +119,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/autostart":
             return self._json({"enabled": autostart.enabled(), "windows": os.name == "nt"})
 
+        if path == "/api/buddy/state":
+            return self._json(buddy.state())
+
         if path == "/api/version":
             return self._json({"version": updater.local_version()})
 
@@ -130,8 +134,9 @@ class Handler(BaseHTTPRequestHandler):
                 p = demo.profile()
                 return self._json({"demo": True, "game_open": True, "henrik_ready": False,
                                    "profile": p, "match_count": 40,
-                                   "settings": {**store.settings(), "henrik_key": None,
-                                                "henrik_key_set": False}})
+                                   "settings": {**store.settings(), "henrik_key": None, "buddy_key": None,
+                                                "henrik_key_set": False,
+                                                "buddy_key_set": bool(store.settings()["buddy_key"])}})
             return self._json(service.status())
 
         if path == "/api/stats":
@@ -182,6 +187,13 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 autostart.disable()
             return self._json({"enabled": autostart.enabled()})
+
+        if path == "/api/buddy/preview":
+            buddy.preview(PORT)
+            return self._json({"ok": True})
+
+        if path == "/api/buddy/test":
+            return self._json(buddy.one_cycle())
 
         if path == "/api/desktop-shortcut":
             return self._json({"path": autostart.desktop_shortcut()})
@@ -280,6 +292,8 @@ def _run_window(server, url):
 def main():
     if "--watch" in sys.argv:
         return autostart.watch()
+    if "--buddy" in sys.argv:
+        return buddy.window_main()
     server = _make_server()
     url = ORIGIN + "/"
     if not DEMO:

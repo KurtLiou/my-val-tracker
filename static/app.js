@@ -809,6 +809,29 @@ async function pageSettings(el) {
         <div class="row"><button class="btn" id="sUpd">檢查更新</button>${S.update?.available ? `<button class="btn" id="sApply">⬆️ 更新到 ${esc(S.update.latest)}</button>` : ""}</div>
       </div>
     </div>
+    <div class="card section buddy-card"><h3>🐣 對戰陪伴啾啾 <span class="hint">對戰時在右下角陪你，只給鼓勵，不給戰術</span></h3>
+      <div class="grid g2">
+        <div>
+          <label class="switch"><input type="checkbox" id="bOn" ${cfg.buddy_enabled !== false ? "checked" : ""}><span></span>
+            <div><b>對戰時自動出現</b><div class="faint" style="font-size:12px">進入對戰自動跳出，打完自動消失</div></div></label>
+          <label class="switch"><input type="checkbox" id="bClick" ${cfg.buddy_clickthrough !== false ? "checked" : ""}><span></span>
+            <div><b>滑鼠穿透</b><div class="faint" style="font-size:12px">點不到啾啾，不會干擾遊戲（建議開著）</div></div></label>
+          <div class="field" style="margin-top:8px"><label>多久說一次話（秒）</label><input id="bInt" type="number" min="10" max="120" value="${cfg.buddy_interval || 20}"></div>
+        </div>
+        <div>
+          <div class="field"><label>讓啾啾「看得到畫面」（選填）</label>
+            <select id="bProv"><option value="none">不用 AI（隨機鼓勵台詞）</option><option value="gemini">Google Gemini</option><option value="claude">Claude</option></select>
+            <small>選 AI 後，啾啾會看你的遊戲畫面，殺人時誇你、被殺時安慰你。截圖只送給你選的 AI，不會存檔。</small></div>
+          <div class="field"><label>AI 金鑰 ${cfg.buddy_key_set ? '<span class="win">（已設定）</span>' : ""}</label>
+            <input id="bKey" type="password" placeholder="${cfg.buddy_key_set ? "已設定，留空表示不變" : "貼上 API key"}">
+            <small>Gemini：<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 免費申請 · Claude：<a href="https://console.anthropic.com/" target="_blank" rel="noopener">Claude Console</a>（依用量計費）</small></div>
+          <div class="field"><label>模型（選填，留空用預設）</label><input id="bModel" placeholder="Gemini 預設 gemini-2.5-flash · Claude 預設 claude-haiku-5-5" value="${esc(cfg.buddy_model || "")}"></div>
+        </div>
+      </div>
+      <div class="row"><button class="btn" id="bSave">儲存</button><button class="btn ghost" id="bPreview">👀 現在叫出來看看</button>
+        <button class="btn ghost" id="bTest">🧪 測試：讓啾啾看一次畫面</button></div>
+      <p class="faint" style="font-size:12px;margin-bottom:0">遊戲請用「視窗化全螢幕」，啾啾才能顯示在遊戲上面（獨占全螢幕會蓋掉它）。</p>
+    </div>
     <div class="card section"><h3>🖼️ 特務圖片</h3>
       <p class="muted" style="margin-top:0">新特務（例如「靜」）官方資料還沒有圖片時，App 會先畫一個可愛的佔位頭像。
         想換成真的圖：把圖片放進下面的資料夾，檔名用特務名字，例如 <b>靜.png</b> 或 <b>Hush.png</b>，重開 App 就會換上。</p>
@@ -849,6 +872,30 @@ async function pageSettings(el) {
     if (r?.available) pageSettings(el);
   };
   if ($("#sApply")) $("#sApply").onclick = applyUpdate;
+  $("#bProv").value = cfg.buddy_provider || "none";
+  const saveBuddy = async () => {
+    const body = { buddy_enabled: $("#bOn").checked, buddy_clickthrough: $("#bClick").checked,
+      buddy_interval: +$("#bInt").value, buddy_provider: $("#bProv").value, buddy_model: $("#bModel").value.trim() };
+    const k = $("#bKey").value.trim();
+    if (k) body.buddy_key = k;
+    await api("/api/settings", body);
+    await refreshStatus();
+  };
+  $("#bSave").onclick = async () => { try { await saveBuddy(); toast("啾啾設定已儲存 ✓"); } catch (e) { toast(e.message); } };
+  $("#bPreview").onclick = async () => {
+    try { await saveBuddy(); await api("/api/buddy/preview", {}); toast("啾啾出現在右下角了（45 秒後自己消失）"); }
+    catch (e) { toast("叫不出來：" + e.message, 4000); }
+  };
+  $("#bTest").onclick = async () => {
+    const b = $("#bTest");
+    b.disabled = true; b.textContent = "啾啾看畫面中…";
+    try {
+      await saveBuddy();
+      const r = await api("/api/buddy/test", {});
+      alertBox(`啾啾說：「${esc(r.line)}」${r.error ? `<br><span class="err" style="font-size:13px">AI 沒有回應，先用離線台詞：${esc(r.error)}</span>` : ""}`);
+    } catch (e) { toast(e.message, 4000); }
+    b.disabled = false; b.textContent = "🧪 測試：讓啾啾看一次畫面";
+  };
   $("#sShortcut").onclick = () => api("/api/desktop-shortcut", {})
     .then(() => alertBox("桌面多了一個「VAL 小戰績」捷徑 🎉<br>以後雙擊它就能開 App。<br><span class='faint'>程式資料夾不要移動或刪除喔。</span>"))
     .catch((e) => toast("建立失敗：" + e.message, 4000));

@@ -2,6 +2,7 @@
 import threading
 import time
 
+import buddy
 import normalize
 import store
 from henrik import HenrikClient, HenrikError
@@ -27,6 +28,9 @@ def status():
             "riot_id": s["riot_id"], "sync_count": s["sync_count"],
             "henrik_key_set": bool(s["henrik_key"]), "youtube_key": s["youtube_key"],
             "update_repo": s["update_repo"], "auto_sync": s["auto_sync"], "show_enemies": s["show_enemies"],
+            "buddy_enabled": s["buddy_enabled"], "buddy_provider": s["buddy_provider"],
+            "buddy_key_set": bool(s["buddy_key"]), "buddy_model": s["buddy_model"],
+            "buddy_interval": s["buddy_interval"], "buddy_clickthrough": s["buddy_clickthrough"],
         },
     }
 
@@ -255,6 +259,13 @@ def _monitor():
                 push_event("game_open")
             was_open = open_now
             state = riot.session_state() if open_now else None
+            if state == "INGAME" and prev != "INGAME":
+                try:
+                    buddy.start_match()
+                except Exception:
+                    pass
+            if prev == "INGAME" and state != "INGAME":
+                buddy.end_match()
             if prev == "INGAME" and state in ("MENUS", None) and open_now and store.settings()["auto_sync"]:
                 time.sleep(20)  # 等伺服器把戰績寫好
                 for _ in range(3):

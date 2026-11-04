@@ -31,7 +31,9 @@ def _write(path, data):
 # ---------- 設定 ----------
 SETTINGS_PATH = os.path.join(ROOT, "settings.json")
 DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_count": 40,
-                    "update_repo": "", "auto_sync": True, "show_enemies": True}
+                    "update_repo": "", "auto_sync": True, "show_enemies": True,
+                    "buddy_enabled": True, "buddy_provider": "none", "buddy_key": "", "buddy_model": "",
+                    "buddy_interval": 20, "buddy_clickthrough": True}
 
 
 def settings():
@@ -47,6 +49,11 @@ def save_settings(new):
     cur["update_repo"] = str(cur.get("update_repo") or "").strip().strip("/")
     cur["auto_sync"] = bool(cur.get("auto_sync"))
     cur["show_enemies"] = bool(cur.get("show_enemies"))
+    cur["buddy_enabled"] = bool(cur.get("buddy_enabled"))
+    cur["buddy_clickthrough"] = bool(cur.get("buddy_clickthrough"))
+    cur["buddy_interval"] = max(10, min(120, int(cur.get("buddy_interval") or 20)))
+    if cur.get("buddy_provider") not in ("none", "gemini", "claude"):
+        cur["buddy_provider"] = "none"
     _write(SETTINGS_PATH, cur)
     return cur
 

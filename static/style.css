@@ -341,3 +341,6 @@ svg text { font-family: var(--font); }
 .enemy-card tr td:first-child { box-shadow: inset 3px 0 0 rgba(255,107,129,.6); }
 .vs { display: flex; align-items: center; gap: 10px; padding: 6px 14px; border-radius: 14px; background: rgba(0,0,0,.35); }
 .vs b { color: var(--red); font-size: 16px; }
+
+.buddy-card { background: linear-gradient(135deg, rgba(169,139,255,.12), var(--card) 60%); }
+.field select { background: var(--bg2); border: 1px solid var(--line); color: var(--text); padding: 10px 12px; border-radius: 12px; font: inherit; }
