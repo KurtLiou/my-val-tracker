@@ -183,6 +183,9 @@ class Handler(BaseHTTPRequestHandler):
                 autostart.disable()
             return self._json({"enabled": autostart.enabled()})
 
+        if path == "/api/desktop-shortcut":
+            return self._json({"path": autostart.desktop_shortcut()})
+
         if path == "/api/update/check":
             repo = store.settings()["update_repo"]
             if not repo:

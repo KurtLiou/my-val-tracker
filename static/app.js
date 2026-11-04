@@ -799,6 +799,7 @@ async function pageSettings(el) {
       <div class="card"><h3>🚀 自動化</h3>
         <label class="switch"><input type="checkbox" id="fAuto"><span></span>
           <div><b>開特戰英豪時自動打開 App</b><div class="faint" style="font-size:12px">開機後在背景待命，偵測到遊戲啟動就自動打開（不碰遊戲本身）</div></div></label>
+        <button class="btn ghost" id="sShortcut" style="margin:4px 0 8px">🖥️ 在桌面建立捷徑</button>
         <label class="switch"><input type="checkbox" id="fAutoSync" ${cfg.auto_sync !== false ? "checked" : ""}><span></span>
           <div><b>每場打完自動同步</b><div class="faint" style="font-size:12px">打完回到大廳後自動抓這場戰績，跳出結算卡片</div></div></label>
       </div>
@@ -848,6 +849,9 @@ async function pageSettings(el) {
     if (r?.available) pageSettings(el);
   };
   if ($("#sApply")) $("#sApply").onclick = applyUpdate;
+  $("#sShortcut").onclick = () => api("/api/desktop-shortcut", {})
+    .then(() => alertBox("桌面多了一個「VAL 小戰績」捷徑 🎉<br>以後雙擊它就能開 App。<br><span class='faint'>程式資料夾不要移動或刪除喔。</span>"))
+    .catch((e) => toast("建立失敗：" + e.message, 4000));
   $("#sAgents").onclick = () => api("/api/open-folder", { which: "agents" }).then((r) => toast("資料夾：" + r.path, 4000)).catch((e) => toast(e.message));
   $("#sClear").onclick = async () => {
     if (!confirm("確定清除所有已存的對局？下次同步會重新下載。")) return;

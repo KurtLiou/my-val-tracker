@@ -64,6 +64,32 @@ def enable():
     subprocess.Popen(cmd, creationflags=NO_WINDOW, close_fds=True)
 
 
+def _make_shortcut(path_expr, cmd, name):
+    """用 PowerShell 建立 .lnk 捷徑。path_expr 是 PowerShell 運算式（資料夾）。"""
+    target, arguments = cmd[0], " ".join(f'"{a}"' for a in cmd[1:])
+    here = os.path.dirname(os.path.abspath(__file__))
+    icon = os.path.join(here, "icon.ico")
+    script = (
+        "$d=" + path_expr + ";"
+        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d " + _ps_quote(name) + "));"
+        "$s.TargetPath=" + _ps_quote(target) + ";"
+        "$s.Arguments=" + _ps_quote(arguments) + ";"
+        "$s.WorkingDirectory=" + _ps_quote(here) + ";"
+        + ("$s.IconLocation=" + _ps_quote(icon) + ";" if os.path.exists(icon) else "")
+        + "$s.Save(); Write-Output (Join-Path $d " + _ps_quote(name) + ")"
+    )
+    out = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                         check=True, capture_output=True, text=True, creationflags=NO_WINDOW, timeout=20)
+    return out.stdout.strip()
+
+
+def desktop_shortcut():
+    """在桌面建立「VAL 小戰績」捷徑（桌面在 OneDrive 裡也找得到）。"""
+    if os.name != "nt":
+        raise RuntimeError("只支援 Windows。")
+    return _make_shortcut("[Environment]::GetFolderPath('Desktop')", _launch_cmd(), "VAL 小戰績.lnk")
+
+
 def disable():
     if os.path.exists(SHORTCUT):
         os.remove(SHORTCUT)
