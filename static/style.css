@@ -356,3 +356,6 @@ svg text { font-family: var(--font); }
 .skin-art.sm { width: 64px; height: 64px; }
 .skin-moods { display: flex; gap: 14px; margin-top: 12px; }
 .skin-moods > div { text-align: center; color: var(--faint); font-size: 11px; }
+
+.diag { font-size: 13px; margin: 0 0 10px 56px; display: flex; flex-direction: column; gap: 2px; }
+.diag pre { background: var(--bg2); border-radius: 10px; padding: 8px 10px; font-size: 11px; white-space: pre-wrap; max-height: 180px; overflow: auto; margin: 6px 0 0; }

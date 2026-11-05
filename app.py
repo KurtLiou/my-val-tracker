@@ -117,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json([] if DEMO else service.events_since(since))
 
         if path == "/api/autostart":
-            return self._json({"enabled": autostart.enabled(), "windows": os.name == "nt"})
+            return self._json(autostart.diagnose())
 
         if path == "/api/buddy/skin":
             cfg = store.settings()

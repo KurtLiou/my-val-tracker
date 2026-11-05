@@ -14,12 +14,32 @@ import urllib.request
 
 import store
 
-GAME_EXE = "VALORANT-Win64-Shipping.exe"
+GAME_EXES = ("VALORANT-Win64-Shipping.exe", "VALORANT.exe")
+WATCH_LOG = os.path.join(store.ROOT, "watch.log")
 STARTUP_DIR = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
 SHORTCUT = os.path.join(STARTUP_DIR, "VAL小戰績-自動啟動.lnk")
 APP_INFO = os.path.join(store.ROOT, "app_running.json")
 WATCH_LOCK_PORT = 8786
 NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW：跑指令時不跳黑色視窗
+
+
+def log(msg):
+    """監看程式的紀錄（設定頁的「自動啟動診斷」會顯示最後幾行）。"""
+    try:
+        if os.path.exists(WATCH_LOG) and os.path.getsize(WATCH_LOG) > 200_000:
+            os.replace(WATCH_LOG, WATCH_LOG + ".old")
+        with open(WATCH_LOG, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
+def log_tail(n=12):
+    try:
+        with open(WATCH_LOG, encoding="utf-8", errors="ignore") as f:
+            return f.read().splitlines()[-n:]
+    except OSError:
+        return []
 
 
 # ---------- 怎麼啟動自己 ----------
@@ -58,10 +78,17 @@ def enable():
         + ("$s.IconLocation=" + _ps_quote(icon) + ";" if os.path.exists(icon) else "")
         + "$s.Save()"
     )
-    subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-                   check=True, creationflags=NO_WINDOW, timeout=20)
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+                       capture_output=True, text=True, creationflags=NO_WINDOW, timeout=20)
+    if not os.path.exists(SHORTCUT):
+        raise RuntimeError("建立開機捷徑失敗：" + (r.stderr.strip()[:200] or "不明原因"))
+    log(f"已建立開機捷徑：{target} {arguments}")
     # 馬上開始監看，不用等下次開機
-    subprocess.Popen(cmd, creationflags=NO_WINDOW, close_fds=True)
+    if not watcher_running():
+        subprocess.Popen(cmd, creationflags=NO_WINDOW, close_fds=True)
+        time.sleep(1.5)
+    if not watcher_running():
+        raise RuntimeError("捷徑建好了，但監看程式沒有啟動。請看設定頁的診斷紀錄。")
 
 
 def _make_shortcut(path_expr, cmd, name):
@@ -124,11 +151,31 @@ def app_running():
 # ---------- 監看遊戲 ----------
 def game_running():
     try:
-        out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {GAME_EXE}", "/NH"],
-                             capture_output=True, text=True, creationflags=NO_WINDOW, timeout=10).stdout
-        return GAME_EXE.lower() in out.lower()
-    except Exception:
+        out = subprocess.run(["tasklist", "/NH", "/FO", "CSV"], capture_output=True, text=True,
+                             errors="ignore", creationflags=NO_WINDOW, timeout=15).stdout.lower()
+        return any(f'"{exe.lower()}"' in out for exe in GAME_EXES)
+    except Exception as e:
+        log(f"讀取工作清單失敗：{e}")
         return False
+
+
+def watcher_running():
+    """監看程式有在跑嗎？（它會佔用 8786 port 當作鎖）"""
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", WATCH_LOCK_PORT))
+        return False
+    except OSError:
+        return True
+    finally:
+        s.close()
+
+
+def diagnose():
+    return {"windows": os.name == "nt", "enabled": enabled(), "shortcut": SHORTCUT,
+            "watcher_running": watcher_running() if os.name == "nt" else False,
+            "game_running": game_running() if os.name == "nt" else False,
+            "launch_cmd": " ".join(_launch_cmd()), "log": log_tail()}
 
 
 def watch():
@@ -137,11 +184,25 @@ def watch():
     try:
         lock.bind(("127.0.0.1", WATCH_LOCK_PORT))
     except OSError:
+        log("監看程式已經在跑了，這個就不重複啟動")
         return
+    log(f"監看程式啟動（{sys.executable}）")
     was_running = False
     while True:
-        running = game_running()
-        if running and not was_running and not app_running():
-            subprocess.Popen(_launch_cmd(), creationflags=NO_WINDOW, close_fds=True)
-        was_running = running
+        try:
+            running = game_running()
+            if running and not was_running:
+                log("偵測到特戰英豪啟動")
+                if app_running():
+                    log("App 已經開著，不用再開")
+                else:
+                    cmd = _launch_cmd()
+                    subprocess.Popen(cmd, creationflags=NO_WINDOW, close_fds=True,
+                                     cwd=os.path.dirname(os.path.abspath(__file__)))
+                    log("已打開 App：" + " ".join(cmd))
+            elif was_running and not running:
+                log("特戰英豪已關閉")
+            was_running = running
+        except Exception as e:
+            log(f"錯誤：{e}")
         time.sleep(5)

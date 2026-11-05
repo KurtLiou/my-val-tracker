@@ -799,6 +799,7 @@ async function pageSettings(el) {
       <div class="card"><h3>🚀 自動化</h3>
         <label class="switch"><input type="checkbox" id="fAuto"><span></span>
           <div><b>開特戰英豪時自動打開 App</b><div class="faint" style="font-size:12px">開機後在背景待命，偵測到遊戲啟動就自動打開（不碰遊戲本身）</div></div></label>
+        <div id="autoDiag" class="diag"></div>
         <button class="btn ghost" id="sShortcut" style="margin:4px 0 8px">🖥️ 在桌面建立捷徑</button>
         <label class="switch"><input type="checkbox" id="fAutoSync" ${cfg.auto_sync !== false ? "checked" : ""}><span></span>
           <div><b>每場打完自動同步</b><div class="faint" style="font-size:12px">打完回到大廳後自動抓這場戰績，跳出結算卡片</div></div></label>
@@ -868,7 +869,23 @@ async function pageSettings(el) {
   };
   $("#sSync").onclick = doSync;
   api("/api/version").then((v) => { $("#verLabel", el).textContent = "目前版本 " + v.version; }).catch(() => {});
+  const drawDiag = (a) => {
+    const ok = (b) => b ? '<span class="win">✓</span>' : '<span class="loss">✗</span>';
+    $("#autoDiag", el).innerHTML = !a.windows ? "" : `
+      <div>${ok(a.enabled)} 開機捷徑 ${a.enabled ? "已建立" : "沒有建立"}</div>
+      <div>${ok(a.watcher_running)} 背景監看程式 ${a.watcher_running ? "正在待命" : "沒有在跑"}</div>
+      <div>${a.game_running ? "🎮 偵測到特戰英豪正在執行" : '<span class="faint">特戰英豪目前沒開</span>'}</div>
+      ${a.enabled && !a.watcher_running ? '<button class="btn" id="sWatch" style="margin-top:6px">▶ 重新啟動監看</button>' : ""}
+      <details style="margin-top:6px"><summary class="faint">診斷紀錄</summary><pre>${esc((a.log || []).join("\n") || "（還沒有紀錄）")}</pre></details>`;
+    const w = $("#sWatch", el);
+    if (w) w.onclick = async () => {
+      try { drawDiag({ ...(await api("/api/autostart", { enabled: true })), windows: true }); toast("監看程式已啟動 ✓"); }
+      catch (e) { toast(e.message, 5000); }
+      api("/api/autostart").then(drawDiag);
+    };
+  };
   api("/api/autostart").then((a) => {
+    drawDiag(a);
     const box = $("#fAuto", el);
     box.checked = a.enabled;
     box.disabled = !a.windows;
@@ -876,6 +893,7 @@ async function pageSettings(el) {
       try {
         const r = await api("/api/autostart", { enabled: box.checked });
         toast(r.enabled ? "已開啟：之後開特戰英豪會自動打開 App ✓" : "已關閉自動啟動");
+        api("/api/autostart").then(drawDiag);
       } catch (e) { box.checked = !box.checked; toast("設定失敗：" + e.message, 4000); }
     };
   }).catch(() => {});
