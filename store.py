@@ -41,7 +41,10 @@ DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_co
 
 
 def settings():
-    return {**DEFAULT_SETTINGS, **_read(SETTINGS_PATH, {})}
+    s = {**DEFAULT_SETTINGS, **_read(SETTINGS_PATH, {})}
+    if s.get("buddy_skin") not in ("jiujiu", "custom"):  # 舊版的原創角色已經拿掉
+        s["buddy_skin"] = "jiujiu"
+    return s
 
 
 def save_settings(new):
@@ -56,7 +59,7 @@ def save_settings(new):
     cur["buddy_enabled"] = bool(cur.get("buddy_enabled"))
     cur["buddy_clickthrough"] = bool(cur.get("buddy_clickthrough"))
     cur["buddy_interval"] = max(10, min(120, int(cur.get("buddy_interval") or 20)))
-    if cur.get("buddy_skin") not in ("jiujiu", "hoshina", "rinne", "wakaba", "custom"):
+    if cur.get("buddy_skin") not in ("jiujiu", "custom"):
         cur["buddy_skin"] = "jiujiu"
     if cur.get("buddy_size") not in ("s", "m", "l"):
         cur["buddy_size"] = "m"

@@ -137,7 +137,7 @@ def ask_ai(cfg, img_b64):
     moods, _ = allowed_moods()
     mood_txt = "、".join(f"{m}={MOOD_DESC[m]}" for m in moods)
     cfg2 = store.settings()
-    who = {"jiujiu": "啾啾", "hoshina": "星奈", "rinne": "凜音", "wakaba": "若葉"}.get(cfg2.get("buddy_skin"), cfg2.get("buddy_custom_name") or "啾啾")
+    who = {"jiujiu": "啾啾"}.get(cfg2.get("buddy_skin"), cfg2.get("buddy_custom_name") or "啾啾")
     rel = f"這次你的名字是「{who}」（不是啾啾的話就用這個名字自稱）。\n" + rel
     user = f"{rel}\n可用表情：{mood_txt}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
     provider, key = cfg.get("buddy_provider"), cfg.get("buddy_key")
