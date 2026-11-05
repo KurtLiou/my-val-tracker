@@ -164,8 +164,31 @@ def sovits_port():
     return int(store.settings().get("sovits_port") or 9880)
 
 
+def find_sovits():
+    """沒設定資料夾時，到 C:\\、D:\\、E:\\ 根目錄找 GPT-SoVITS 開頭的資料夾。"""
+    for drive in ("D:\\", "C:\\", "E:\\"):
+        try:
+            names = sorted(os.listdir(drive), reverse=True)
+        except OSError:
+            continue
+        for n in names:
+            d = os.path.join(drive, n)
+            if n.lower().startswith("gpt-sovits") and os.path.exists(os.path.join(d, "api_v2.py")):
+                return d
+    return ""
+
+
+def sovits_dir():
+    d = store.settings().get("sovits_dir") or ""
+    if not d and os.name == "nt":
+        d = find_sovits()
+        if d:
+            store.save_settings({"sovits_dir": d})
+    return d
+
+
 def sovits_dir_ok(d=None):
-    d = d or store.settings().get("sovits_dir") or ""
+    d = d or sovits_dir()
     return bool(d) and os.path.exists(os.path.join(d, "api_v2.py"))
 
 
@@ -189,7 +212,7 @@ def sovits_running():
 
 
 def sovits_status():
-    d = store.settings().get("sovits_dir") or ""
+    d = sovits_dir()
     return {"dir": d, "dir_ok": sovits_dir_ok(d), "python_ok": bool(d and _sovits_python(d)),
             "running": sovits_running(), "starting": _sovits["starting"], "error": _sovits["error"],
             "port": sovits_port()}
@@ -199,7 +222,7 @@ def start_sovits(wait=False):
     """在背景啟動 GPT-SoVITS 的 API（api_v2.py）。已經在跑就不重複啟動。"""
     if sovits_running():
         return True
-    d = store.settings().get("sovits_dir") or ""
+    d = sovits_dir()
     if not sovits_dir_ok(d):
         _sovits["error"] = "還沒設定 GPT-SoVITS 資料夾，或資料夾裡找不到 api_v2.py"
         return False
