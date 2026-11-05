@@ -166,8 +166,12 @@
   }
 
   /* 疊好的角色：背後配件 → 角色 → 前面配件 */
+  // 養成解鎖的表情，原創角色用最接近的基本表情
+  const BASE_MOOD = { comfort: "sad", proud: "wow", daily: "happy" };
+  window.BASE_MOOD = BASE_MOOD;
   window.renderBuddy = function (skin, mood, items, opt = {}) {
     items = items || [];
+    if (skin !== "custom") mood = BASE_MOOD[mood] || mood;
     const sk = window.SKINS[skin] || window.SKINS.jiujiu;
     let body;
     if (skin === "custom") {

@@ -33,7 +33,20 @@ SYSTEM_PROMPT = """你是「啾啾」，一隻超可愛的漂浮小機器人吉�
 2. 絕對不要提到敵人的位置、人數、血量、技能或任何畫面上的敵方資訊。
 3. 只說一句繁體中文，15 個字以內，可愛語氣，可以加 1 個 emoji。
 4. 不要重複最近說過的話。
-只回傳 JSON：{"line": "你要說的話", "mood": "happy|wow|sad|cheer"}"""
+只回傳 JSON：{"line": "你要說的話", "mood": "從可用表情裡選一個"}"""
+
+MOOD_DESC = {"happy": "平常", "wow": "驚喜（玩家打得好）", "sad": "難過（玩家被殺、輸回合）", "cheer": "加油打氣",
+             "comfort": "加碼安慰（玩家連續失利、很需要安慰時）",
+             "proud": "傲嬌的肯定（玩家打得特別好，嘴硬地稱讚）", "daily": "專屬日常（沒什麼事時的親近閒聊）"}
+
+
+def allowed_moods():
+    try:
+        import progress
+        stage = progress.ai_context(store.profile().get("name") or "")[1]
+    except Exception:
+        stage = 0
+    return [m for m, _, need in store.BUDDY_MOODS if stage >= need], stage
 
 # 離線台詞：依親密度階段（0 初次見面 → 3 最佳戰友），{n} 會換成暱稱
 OFFLINE_BY_STAGE = [
@@ -106,7 +119,8 @@ def _parse(text):
             d = json.loads(m.group(0))
             line = str(d.get("line") or "").strip()
             if line:
-                return line[:40], d.get("mood") if d.get("mood") in ("happy", "wow", "sad", "cheer") else "happy"
+                ok = allowed_moods()[0]
+                return line[:40], d.get("mood") if d.get("mood") in ok else "happy"
         except ValueError:
             pass
     line = (text or "").strip().strip('"').splitlines()[0] if text and text.strip() else ""
@@ -120,7 +134,12 @@ def ask_ai(cfg, img_b64):
         rel = progress.ai_context(store.profile().get("name") or "")[0]
     except Exception:
         rel = ""
-    user = f"{rel}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
+    moods, _ = allowed_moods()
+    mood_txt = "、".join(f"{m}={MOOD_DESC[m]}" for m in moods)
+    cfg2 = store.settings()
+    who = {"jiujiu": "啾啾", "hoshina": "星奈", "rinne": "凜音", "wakaba": "若葉"}.get(cfg2.get("buddy_skin"), cfg2.get("buddy_custom_name") or "啾啾")
+    rel = f"這次你的名字是「{who}」（不是啾啾的話就用這個名字自稱）。\n" + rel
+    user = f"{rel}\n可用表情：{mood_txt}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
     provider, key = cfg.get("buddy_provider"), cfg.get("buddy_key")
     if provider == "gemini":
         model = cfg.get("buddy_model") or "gemini-2.5-flash"
@@ -154,9 +173,16 @@ def offline_line():
         _, stage, nick = progress.ai_context(store.profile().get("name") or "")
     except Exception:
         stage, nick = 0, ""
+    if stage >= 2 and random.random() < 0.2:
+        pool = [x.format(n=nick or "你") for x in DAILY_LINES]
+        return random.choice([x for x in pool if x not in _history[-4:]] or pool), "daily"
     pool = [x.format(n=nick or "你") for x in OFFLINE_BY_STAGE[stage]]
     pool = [x for x in pool if x not in _history[-4:]] or pool
     return random.choice(pool), random.choice(["happy", "cheer"])
+
+
+DAILY_LINES = ["{n}，今天有好好吃飯嗎？", "陪你打遊戲的時間最開心了～", "嘿嘿，就是想跟你說說話",
+               "累了的話休息一下也沒關係喔", "下一場也要一起！"]
 
 
 def say(line, mood="happy", speak=True):
@@ -244,10 +270,17 @@ def start_match():
 def end_match(won=None):
     with _lock:
         _state["active"] = False
+    moods, _ = allowed_moods()
     if won is True:
-        say("贏了！你是最棒的 🏆", "wow")
+        if "proud" in moods:
+            say("哼、哼！這次就勉強誇你一下好了 🏆", "proud")
+        else:
+            say("贏了！你是最棒的 🏆", "wow")
     elif won is False:
-        say("辛苦了，下一場一定贏 💕", "sad")
+        if "comfort" in moods:
+            say("沒關係，我一直都在 💗 下一場一起贏回來", "comfort")
+        else:
+            say("辛苦了，下一場一定贏 💕", "sad")
 
 
 def open_setup(port=None):

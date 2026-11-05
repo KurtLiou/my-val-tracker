@@ -35,6 +35,7 @@ DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_co
                     "buddy_enabled": True, "buddy_provider": "none", "buddy_key": "", "buddy_model": "",
                     "buddy_interval": 20, "buddy_clickthrough": True,
                     "buddy_skin": "jiujiu", "buddy_size": "m", "buddy_x": None, "buddy_y": None,
+                    "buddy_custom_name": "",
                     "voice_enabled": True, "voice_engine": "edge", "voice_name": "zh-TW-HsiaoYuNeural",
                     "voice_rate": 5, "voice_pitch": 10, "voice_volume": 70}
 
@@ -62,6 +63,7 @@ def save_settings(new):
     for k in ("buddy_x", "buddy_y"):
         cur[k] = int(cur[k]) if isinstance(cur.get(k), (int, float)) else None
     cur["voice_enabled"] = bool(cur.get("voice_enabled"))
+    cur["buddy_custom_name"] = str(cur.get("buddy_custom_name") or "").strip()[:16]
     if cur.get("voice_engine") not in ("edge", "windows"):
         cur["voice_engine"] = "edge"
     for k, lo, hi in (("voice_rate", -30, 50), ("voice_pitch", -20, 40), ("voice_volume", 0, 100)):
@@ -203,3 +205,46 @@ def buddy_outfits():
             if files:
                 out.append({"name": name, "files": files})
     return out
+
+
+# ---------- 表情欄位 ----------
+# 基本 4 個 + 養成解鎖 3 個（需要的親密度階段）
+BUDDY_MOODS = [("happy", "平常", 0), ("wow", "驚喜", 0), ("sad", "難過", 0), ("cheer", "加油", 0),
+               ("comfort", "加碼安慰", 1), ("proud", "傲嬌的肯定", 2), ("daily", "專屬日常", 2)]
+IMG_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+
+def save_buddy_image(mood, data, ext):
+    if mood not in [m for m, _, _ in BUDDY_MOODS]:
+        raise ValueError("不認識的表情欄位")
+    ext = ext.lower() if ext.lower() in IMG_EXTS else ".png"
+    remove_buddy_image(mood)
+    path = os.path.join(BUDDY_IMG_DIR, mood + ext)
+    with open(path, "wb") as f:
+        f.write(data)
+    return os.path.basename(path)
+
+
+def remove_buddy_image(mood):
+    for f in os.listdir(BUDDY_IMG_DIR):
+        stem, ext = os.path.splitext(f)
+        if stem.lower() == mood and ext.lower() in IMG_EXTS:
+            os.remove(os.path.join(BUDDY_IMG_DIR, f))
+
+
+def import_buddy_seed(folder):
+    """把 App 資料夾裡 buddy_import 的圖片搬進自訂圖片資料夾（Claude 幫你放圖用）。回傳搬了幾張。"""
+    if not os.path.isdir(folder):
+        return 0
+    n = 0
+    for f in os.listdir(folder):
+        stem, ext = os.path.splitext(f)
+        if ext.lower() in IMG_EXTS and stem.lower() in [m for m, _, _ in BUDDY_MOODS]:
+            remove_buddy_image(stem.lower())
+            os.replace(os.path.join(folder, f), os.path.join(BUDDY_IMG_DIR, stem.lower() + ext.lower()))
+            n += 1
+    try:
+        os.rmdir(folder)
+    except OSError:
+        pass
+    return n

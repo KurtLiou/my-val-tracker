@@ -127,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
             cfg = store.settings()
             f = progress.full()
             return self._json({"skin": cfg["buddy_skin"], "size": cfg["buddy_size"], "files": store.buddy_images(),
+                               "moods": [{"id": m, "name": n, "need": k} for m, n, k in store.BUDDY_MOODS],
+                               "bond": f["current_bond"]["index"], "custom_name": cfg["buddy_custom_name"],
                                "equipped": f["equipped"], "adjust": f["adjust"].get(cfg["buddy_skin"], {}),
                                "frame": f["frame"], "level": f["level"], "outfits": store.buddy_outfits(),
                                "outfit": f.get("outfit")})
@@ -246,6 +248,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/voice/test":
             return self._json(voice.speak(str(body.get("text") or "嗨～我是你的陪伴角色！今天也一起加油吧！"), wait=True))
 
+        if path == "/api/buddy/upload":  # 在角色房間上傳表情圖
+            data = str(body.get("data") or "")
+            if not data.startswith("data:image/") or "," not in data:
+                return self._json({"error": "圖片格式不對"})
+            raw = base64.b64decode(data.split(",", 1)[1])
+            if len(raw) > 15 * 1024 * 1024:
+                return self._json({"error": "圖片太大（上限 15MB）"})
+            ext = os.path.splitext(str(body.get("name") or ""))[1] or "." + data[11:data.index(";")]
+            return self._json({"file": store.save_buddy_image(body.get("mood"), raw, ext)})
+
+        if path == "/api/buddy/remove":
+            store.remove_buddy_image(str(body.get("mood") or ""))
+            return self._json({"ok": True})
+
         if path == "/api/buddy/setup":  # 調整位置模式
             if body.get("reset"):
                 store.save_settings({"buddy_x": None, "buddy_y": None})
@@ -359,6 +375,9 @@ def main():
     url = ORIGIN + "/"
     if not DEMO:
         autostart.mark_app_running(PORT)
+        # Claude 幫你放進 buddy_import 的圖：搬進自訂圖片資料夾，並切換成自訂角色
+        if store.import_buddy_seed(os.path.join(os.path.dirname(os.path.abspath(__file__)), "buddy_import")):
+            store.save_settings({"buddy_skin": "custom"})
         service.start_monitor()
     if "--browser" in sys.argv or "--no-browser" in sys.argv:
         return _run_browser(server, url)

@@ -13,6 +13,7 @@
   .bubble.pop { animation: pop .45s cubic-bezier(.2,1.6,.4,1); }
   .bubble.hide { opacity: 0; transform: scale(.6); transition: .4s; }
   .bubble.wow { background: #fff6d6; } .bubble.sad { background: #e8f0ff; } .bubble.cheer { background: #ffe8ec; }
+  .bubble.comfort { background: #ffeef6; } .bubble.proud { background: #fff0e0; } .bubble.daily { background: #effff6; }
   #bot { width: calc(110px * var(--k, 1)); height: calc(110px * var(--k, 1)); }
   #bot > * { filter: drop-shadow(0 6px 14px rgba(0,0,0,.45)); animation: bob 3s ease-in-out infinite; }
   .lv { position: absolute; right: 10px; bottom: 6px; background: #1b2036; color: #ffd166; font-size: 11px; font-weight: 800;
@@ -63,7 +64,7 @@ function art(mood) {
     const pack = (skin.outfits || []).find((o) => o.name === skin.outfit);
     const files = pack ? pack.files.map((f) => pack.name + "/" + f) : skin.files;
     const pickFile = (m) => files.find((f) => f.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase() === m);
-    const f = pickFile(mood) || pickFile("happy") || pickFile("default") || files[0];
+    const f = pickFile(mood) || pickFile(window.BASE_MOOD[mood]) || pickFile("happy") || pickFile("default") || files[0];
     if (f) customSrc = "/custom-buddy/" + f.split("/").map(encodeURIComponent).join("/");
   }
   return window.renderBuddy(skin.skin, mood, skin.equipped || [], { customSrc, adjust: skin.adjust });
@@ -81,10 +82,10 @@ function hearts(n, ch) {
 function show(line, mood) {
   botEl.innerHTML = art(mood);
   wrap.classList.remove("jump", "shake"); void wrap.offsetWidth;
-  wrap.classList.add(mood === "sad" ? "shake" : "jump");
+  wrap.classList.add(mood === "sad" || mood === "comfort" ? "shake" : "jump");
   bubble.className = "bubble pop " + mood + " f-" + (skin.frame || "default");
   bubble.textContent = line;
-  hearts(mood === "wow" ? 4 : 3, { wow: "✨", cheer: "💪", sad: "💗" }[mood] || "💕");
+  hearts(mood === "wow" || mood === "proud" ? 4 : 3, { wow: "✨", cheer: "💪", sad: "💗", comfort: "💗", proud: "💢", daily: "☕" }[mood] || "💕");
   clearTimeout(hideTimer);
   if (!SETUP) hideTimer = setTimeout(() => { bubble.className = "bubble hide " + mood; botEl.innerHTML = art("happy"); }, 9000);
 }

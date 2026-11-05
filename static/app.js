@@ -1270,7 +1270,7 @@ function customSrcOf(sk, mood) {
   const pack = (sk.outfits || []).find((o) => o.name === sk.outfit);
   const files = pack ? pack.files.map((f) => pack.name + "/" + f) : (sk.files || []);
   const pickF = (m) => files.find((f) => f.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase() === m);
-  const f = pickF(mood) || pickF("happy") || pickF("default") || files[0];
+  const f = pickF(mood) || pickF(window.BASE_MOOD[mood]) || pickF("happy") || pickF("default") || files[0];
   return f ? "/custom-buddy/" + f.split("/").map(encodeURIComponent).join("/") : null;
 }
 
@@ -1307,7 +1307,7 @@ async function pageRoom(el, keep = {}) {
           <div style="flex:1"><div class="muted" style="font-size:12px">經驗值 ${pr.xp} / ${pr.xp_next || "MAX"}　·　累計 ${pr.total_xp} XP　·　${pr.counters.games} 場</div>
           <div class="xpbar"><i style="width:${pr.xp_next ? Math.round((pr.xp / pr.xp_next) * 100) : 100}%"></i></div></div></div>
         <div class="row" style="margin-top:14px"><div class="bondic">💞</div>
-          <div style="flex:1"><div class="muted" style="font-size:12px">和「${esc(window.SKINS[skinId]?.name || "角色")}」的親密度：<b style="color:var(--peach)">${esc(bond.name)}</b>
+          <div style="flex:1"><div class="muted" style="font-size:12px">和「${esc(isCustom ? (sk.custom_name || "自訂角色") : (window.SKINS[skinId]?.name || "角色"))}」的親密度：<b style="color:var(--peach)">${esc(bond.name)}</b>
             ${bond.next ? `（${bond.points} / ${bond.next}）` : "（已經是最高階段！）"}</div>
           <div class="xpbar bond"><i style="width:${bondPct}%"></i></div>
           <div class="faint" style="font-size:11px;margin-top:4px">${pr.stages.map((st, i) => `<span class="${i <= bond.index ? "win" : ""}">${st.name}</span>`).join(" → ")}</div></div></div>
@@ -1317,6 +1317,23 @@ async function pageRoom(el, keep = {}) {
         <div class="row" style="flex-wrap:wrap">${Object.entries(window.SKINS).map(([id, k]) => `<button class="chip ${id === skinId ? "on" : ""}" data-skin="${id}">${esc(k.name)}</button>`).join("")}</div>
       </div>
     </div>
+
+    ${isCustom ? `<div class="card section"><h3>🏷️ 角色名字</h3>
+      <div class="row"><input id="rCName" class="sel" style="flex:1" maxlength="16" placeholder="例如：艾莉" value="${esc(sk.custom_name || "")}"><button class="btn" id="rCNameSave">儲存</button></div>
+      <div class="faint" style="font-size:12px;margin-top:6px">AI 講話時會用這個名字自稱。</div></div>` : ""}
+    ${isCustom ? `<div class="card section"><h3>🎭 表情欄位 <span class="hint">點「上傳」選圖片，自動存好；背景透明的 PNG／動態 WebP／GIF 最好看</span></h3>
+      <div class="slots">${sk.moods.map((m) => {
+        const file = (sk.files || []).find((f) => f.replace(/\.[^.]+$/, "").toLowerCase() === m.id);
+        const locked = sk.bond < m.need;
+        return `<div class="slot ${locked ? "locked" : ""}">
+          <div class="slot-art">${file ? `<img src="/custom-buddy/${encodeURIComponent(file)}?t=${Date.now()}" alt="">` : `<span class="faint">${m.need ? "專屬" : "空"}</span>`}</div>
+          <b>${esc(m.name)}</b>
+          <small>${m.need ? (locked ? `🔒 親密度「${esc(pr.stages[m.need].name)}」解鎖（可以先放圖）` : "✨ 已解鎖") : "基本表情"}</small>
+          <div class="row" style="justify-content:center;gap:6px">
+            <label class="btn ghost small">上傳<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-up="${m.id}" hidden></label>
+            ${file ? `<button class="btn ghost small" data-rm="${m.id}">移除</button>` : ""}</div></div>`;
+      }).join("")}</div>
+      <div class="faint" style="font-size:12px;margin-top:8px">專屬欄位沒放圖的話，會用最接近的基本表情代替。</div></div>` : ""}
 
     <div class="card section"><h3>👗 衣櫃 <span class="hint">同一個位置只能戴一個；換角色時配件各自記住</span></h3>
       <div class="items">${pr.items.map(itemCard).join("")}</div>
@@ -1366,6 +1383,18 @@ async function pageRoom(el, keep = {}) {
     await api("/api/progress/equip", { skin: skinId, item: it.id, on: !pr.equipped.includes(it.id) });
     rerender();
   });
+  el.querySelectorAll("[data-up]").forEach((inp) => inp.onchange = () => {
+    const file = inp.files[0];
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = async () => {
+      try { await api("/api/buddy/upload", { mood: inp.dataset.up, name: file.name, data: rd.result }); toast("已放進表情欄位 ✓"); rerender(); }
+      catch (e) { toast("上傳失敗：" + e.message, 4000); }
+    };
+    rd.readAsDataURL(file);
+  });
+  if ($("#rCNameSave", el)) $("#rCNameSave", el).onclick = async () => { await api("/api/settings", { buddy_custom_name: $("#rCName", el).value }); toast("名字已儲存 ✓"); rerender(); };
+  el.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => { await api("/api/buddy/remove", { mood: b.dataset.rm }); rerender(); });
   el.querySelectorAll("[data-frame]").forEach((b) => b.onclick = async () => { await api("/api/progress/frame", { frame: b.dataset.frame }); rerender(); });
   el.querySelectorAll("[data-outfit]").forEach((b) => b.onclick = async () => {
     try { await api("/api/progress/outfit", { outfit: b.dataset.outfit }); rerender(); } catch (e) { toast(e.message); }

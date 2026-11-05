@@ -404,3 +404,11 @@ svg text { font-family: var(--font); }
 .confetti span { position: absolute; top: -20px; left: calc(var(--i) * 5%); font-size: 20px; animation: fall 2.4s ease-in calc(var(--i) * .08s) infinite; }
 @keyframes fall { to { transform: translateY(520px) rotate(360deg); opacity: 0; } }
 @media (max-width: 900px) { .room-top { grid-template-columns: 1fr; } .adj { grid-template-columns: 1fr; } }
+
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.slot { background: var(--card2); border: 2px solid var(--line); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.slot.locked { border-style: dashed; }
+.slot small { color: var(--faint); font-size: 11px; }
+.slot-art { width: 96px; height: 96px; display: grid; place-items: center; background: repeating-conic-gradient(#2a3350 0 25%, #222a44 0 50%) 0 0 / 16px 16px; border-radius: 12px; overflow: hidden; }
+.slot-art img { width: 100%; height: 100%; object-fit: contain; }
+.btn.small { padding: 5px 10px; font-size: 12px; border-radius: 9px; cursor: pointer; }
