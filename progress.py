@@ -104,6 +104,12 @@ def load():
     d.setdefault("nickname", "")
     d.setdefault("announced", [])
     d.setdefault("outfit", "")
+    # 舊版的單一自訂角色存成 "custom"，搬到 "custom:<角色ID>"
+    legacy = store._legacy_char_id()
+    if legacy:
+        for k in ("affection", "equipped", "adjust"):
+            if "custom" in d[k]:
+                d[k].setdefault("custom:" + legacy, d[k].pop("custom"))
     return d
 
 
@@ -250,7 +256,8 @@ def full(profile_name=""):
     equipped = [i for i in d["equipped"].get(skin, []) if i in unlocked]
     frame = d["frame"] if d["frame"] == "default" or ("frame:" + d["frame"]) in unlocked else "default"
     outfits = []
-    for o in store.buddy_outfits():
+    cid = store.current_char()
+    for o in (store.char_outfits(cid) if cid else []):
         ok, cond = outfit_unlocked(o["name"], s["level"], s["counters"])
         outfits.append({**o, "unlocked": ok, "cond": cond})
     outfit = d["outfit"] if any(o["name"] == d["outfit"] and o["unlocked"] for o in outfits) else ""

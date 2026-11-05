@@ -818,14 +818,8 @@ async function pageSettings(el) {
       </div>
     </div>
     <div class="card section buddy-card"><h3>🐣 對戰陪伴啾啾 <span class="hint">對戰時在右下角陪你，只給鼓勵，不給戰術</span></h3>
-      <h4 style="margin:4px 0 10px">選角色</h4>
-      <div class="skins">${Object.entries(window.SKINS || {}).map(([id, sk]) => `<button class="skin ${id === (cfg.buddy_skin || "jiujiu") ? "on" : ""}" data-skin="${id}">
-          <div class="skin-art">${sk.svg ? sk.svg("happy") : "🖼️"}</div><b>${esc(sk.name)}</b><small>${esc(sk.desc)}</small></button>`).join("")}</div>
-      <div class="skin-moods" id="skinMoods"></div>
-      <div id="customHelp" class="muted" style="font-size:13px;margin:8px 0;display:none">
-        把圖片放進自訂資料夾，檔名用情緒命名：<b>happy.png</b>（平常）、<b>wow.png</b>（驚喜）、<b>sad.png</b>（難過）、<b>cheer.png</b>（加油）。
-        只放一張 happy.png 也可以，背景透明的 PNG 最好看。
-        <button class="btn ghost" id="bFolder" style="margin-left:6px">📂 打開自訂圖片資料夾</button></div>
+      <h4 style="margin:4px 0 10px">選角色 <span class="faint" style="font-weight:400;font-size:12px">（新增角色、上傳表情、改個性都在「角色房間」）</span></h4>
+      <div class="skins" id="skinPick">${loading()}</div>
       <div class="row" style="margin:14px 0 6px">
         <span class="muted" style="font-size:13px">大小</span>
         <div class="chips">${[["s", "小"], ["m", "中"], ["l", "大"]].map(([v, t]) => `<button class="chip ${v === (cfg.buddy_size || "m") ? "on" : ""}" data-size="${v}">${t}</button>`).join("")}</div>
@@ -913,20 +907,20 @@ async function pageSettings(el) {
   };
   if ($("#sApply")) $("#sApply").onclick = applyUpdate;
   $("#bProv").value = cfg.buddy_provider || "none";
-  let skinSel = cfg.buddy_skin || "jiujiu", sizeSel = cfg.buddy_size || "m";
-  const drawMoods = () => {
-    const sk = window.SKINS?.[skinSel];
-    $("#customHelp", el).style.display = skinSel === "custom" ? "block" : "none";
-    $("#skinMoods", el).innerHTML = sk?.svg ? [["happy", "平常"], ["wow", "驚喜"], ["sad", "難過"], ["cheer", "加油"]]
-      .map(([m, t]) => `<div><div class="skin-art sm">${sk.svg(m)}</div><small>${t}</small></div>`).join("") : "";
-  };
-  drawMoods();
-  el.querySelectorAll("[data-skin]").forEach((b) => b.onclick = async () => {
-    skinSel = b.dataset.skin;
-    el.querySelectorAll("[data-skin]").forEach((x) => x.classList.toggle("on", x === b));
-    drawMoods();
-    await api("/api/settings", { buddy_skin: skinSel });
-    toast(`已換成「${window.SKINS[skinSel].name}」✓`);
+  let sizeSel = cfg.buddy_size || "m";
+  api("/api/buddy/skin").then((bs) => {
+    const cards = [["jiujiu", "啾啾", window.SKINS.jiujiu.svg("happy"), "漂浮小機器人"],
+      ...bs.characters.map((c) => ["custom:" + c.id, c.name, c.cover ? `<img src="/custom-buddy/${encodeURIComponent(c.id)}/${encodeURIComponent(c.cover)}" style="width:100%;height:100%;object-fit:contain">` : "🖼️", "自訂角色"])];
+    $("#skinPick", el).innerHTML = cards.map(([id, name, art, desc]) => `<button class="skin ${id === bs.skin ? "on" : ""}" data-skin="${esc(id)}">
+      <div class="skin-art">${art}</div><b>${esc(name)}</b><small>${esc(desc)}</small></button>`).join("")
+      + `<button class="skin" data-goroom><div class="skin-art">➕</div><b>新增角色</b><small>到角色房間</small></button>`;
+    el.querySelectorAll("[data-skin]").forEach((b) => b.onclick = async () => {
+      el.querySelectorAll("[data-skin]").forEach((x) => x.classList.toggle("on", x === b));
+      await api("/api/settings", { buddy_skin: b.dataset.skin });
+      await refreshStatus();
+      toast(`已換成「${b.querySelector("b").textContent}」✓`);
+    });
+    el.querySelector("[data-goroom]").onclick = () => { location.hash = "#/room"; };
   });
   el.querySelectorAll("[data-size]").forEach((b) => b.onclick = async () => {
     sizeSel = b.dataset.size;
@@ -934,7 +928,6 @@ async function pageSettings(el) {
     await api("/api/settings", { buddy_size: sizeSel });
     toast("大小已儲存 ✓（下次出現時生效）");
   });
-  $("#bFolder", el).onclick = () => api("/api/open-folder", { which: "buddy" }).then((r) => toast("資料夾：" + r.path, 4000));
   $("#bPos", el).onclick = async () => {
     try { await api("/api/buddy/setup", {}); alertBox("角色出現了！把它<b>拖到想要的位置</b>，再按左上角的「✓ 完成」。<br><span class='faint'>拖的時候暫時不會滑鼠穿透。</span>"); }
     catch (e) { toast(e.message, 4000); }
@@ -1267,18 +1260,19 @@ const VOICE_LIST = [["zh-TW-HsiaoYuNeural", "曉雨（台灣・活潑）"], ["zh
 const MEM_TEXT = { ace: "打出 ACE 🌟", clutch: "贏下殘局 👑", k4: "打出 4 殺 💥", mvp: "拿下全場 MVP 🏆" };
 
 function customSrcOf(sk, mood) {
+  if (!sk.char) return null;
   const pack = (sk.outfits || []).find((o) => o.name === sk.outfit);
   const files = pack ? pack.files.map((f) => pack.name + "/" + f) : (sk.files || []);
-  const pickF = (m) => files.find((f) => f.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase() === m);
-  const f = pickF(mood) || pickF(window.BASE_MOOD[mood]) || pickF("happy") || pickF("default") || files[0];
-  return f ? "/custom-buddy/" + f.split("/").map(encodeURIComponent).join("/") : null;
+  const f = window.pickMoodFile(files, mood);
+  return f ? "/custom-buddy/" + [sk.char, ...f.split("/")].map(encodeURIComponent).join("/") : null;
 }
 
 async function pageRoom(el, keep = {}) {
   const [pr, sk] = await Promise.all([api("/api/progress"), api("/api/buddy/skin")]);
   const cfg = S.status?.settings || {};
   const skinId = pr.skin, mood = keep.mood || "happy";
-  const isCustom = skinId === "custom";
+  const isCustom = String(skinId).startsWith("custom:");
+  const P = isCustom ? (await api("/api/persona")) : null;
   const bond = pr.current_bond;
   const bondPct = bond.next ? Math.round(((bond.points - bond.base) / (bond.next - bond.base)) * 100) : 100;
   const stage = () => window.renderBuddy(skinId, mood, pr.equipped, { customSrc: customSrcOf(sk, mood), adjust: sk.adjust });
@@ -1290,7 +1284,7 @@ async function pageRoom(el, keep = {}) {
         : `<small>🔒 ${esc(it.cond)}</small><div class="hbar" style="margin-top:4px"><i style="width:${Math.round((it.have / it.need) * 100)}%"></i></div>`}</button>`;
   };
   const adjRows = isCustom ? pr.equipped.map((id) => {
-    const a = (pr.adjust.custom || {})[id] || { x: 0, y: 0, s: 1 };
+    const a = (pr.adjust[skinId] || {})[id] || { x: 0, y: 0, s: 1 };
     return `<div class="adj" data-adj="${id}"><b>${esc(window.ACCESSORY_NAMES[id] || id)}</b>
       <label>左右<input type="range" min="-60" max="60" step="1" value="${a.x}" data-k="x"></label>
       <label>上下<input type="range" min="-60" max="60" step="1" value="${a.y}" data-k="y"></label>
@@ -1307,26 +1301,27 @@ async function pageRoom(el, keep = {}) {
           <div style="flex:1"><div class="muted" style="font-size:12px">經驗值 ${pr.xp} / ${pr.xp_next || "MAX"}　·　累計 ${pr.total_xp} XP　·　${pr.counters.games} 場</div>
           <div class="xpbar"><i style="width:${pr.xp_next ? Math.round((pr.xp / pr.xp_next) * 100) : 100}%"></i></div></div></div>
         <div class="row" style="margin-top:14px"><div class="bondic">💞</div>
-          <div style="flex:1"><div class="muted" style="font-size:12px">和「${esc(isCustom ? (sk.custom_name || "自訂角色") : (window.SKINS[skinId]?.name || "角色"))}」的親密度：<b style="color:var(--peach)">${esc(bond.name)}</b>
+          <div style="flex:1"><div class="muted" style="font-size:12px">和「${esc(isCustom ? (sk.custom_name || "自訂角色") : "啾啾")}」的親密度：<b style="color:var(--peach)">${esc(bond.name)}</b>
             ${bond.next ? `（${bond.points} / ${bond.next}）` : "（已經是最高階段！）"}</div>
           <div class="xpbar bond"><i style="width:${bondPct}%"></i></div>
           <div class="faint" style="font-size:11px;margin-top:4px">${pr.stages.map((st, i) => `<span class="${i <= bond.index ? "win" : ""}">${st.name}</span>`).join(" → ")}</div></div></div>
         <div class="field" style="margin-top:16px"><label>角色要怎麼叫你</label>
           <div class="row"><input id="rNick" value="${esc(pr.nickname)}" maxlength="20" style="flex:1"><button class="btn" id="rNickSave">儲存</button></div>
           <small>預設是你的遊戲名字，想改就改。</small></div>
-        <div class="row" style="flex-wrap:wrap">${Object.entries(window.SKINS).map(([id, k]) => `<button class="chip ${id === skinId ? "on" : ""}" data-skin="${id}">${esc(k.name)}</button>`).join("")}</div>
+        <div class="muted" style="font-size:12px;margin:4px 0 6px">選角色</div>
+        <div class="charpick">${[["jiujiu", "啾啾", null], ...sk.characters.map((c) => ["custom:" + c.id, c.name, c])].map(([id, name, c]) => `<button class="charbtn ${id === skinId ? "on" : ""}" data-skin="${esc(id)}">
+            <div class="charart">${c ? (c.cover ? `<img src="/custom-buddy/${encodeURIComponent(c.id)}/${encodeURIComponent(c.cover)}">` : "🖼️") : window.SKINS.jiujiu.svg("happy")}</div><span>${esc(name)}</span></button>`).join("")}
+          <button class="charbtn" id="rNewChar"><div class="charart">➕</div><span>新增角色</span></button></div>
       </div>
     </div>
 
-    ${isCustom ? `<div class="card section"><h3>🏷️ 角色名字</h3>
-      <div class="row"><input id="rCName" class="sel" style="flex:1" maxlength="16" placeholder="例如：艾莉" value="${esc(sk.custom_name || "")}"><button class="btn" id="rCNameSave">儲存</button></div>
-      <div class="faint" style="font-size:12px;margin-top:6px">AI 講話時會用這個名字自稱。</div></div>` : ""}
+    ${isCustom ? personaCard(P) : ""}
     ${isCustom ? `<div class="card section"><h3>🎭 表情欄位 <span class="hint">點「上傳」選圖片，自動存好；背景透明的 PNG／動態 WebP／GIF 最好看</span></h3>
       <div class="slots">${sk.moods.map((m) => {
         const file = (sk.files || []).find((f) => f.replace(/\.[^.]+$/, "").toLowerCase() === m.id);
         const locked = sk.bond < m.need;
         return `<div class="slot ${locked ? "locked" : ""}">
-          <div class="slot-art">${file ? `<img src="/custom-buddy/${encodeURIComponent(file)}?t=${Date.now()}" alt="">` : `<span class="faint">${m.need ? "專屬" : "空"}</span>`}</div>
+          <div class="slot-art">${file ? `<img src="/custom-buddy/${encodeURIComponent(sk.char)}/${encodeURIComponent(file)}?t=${Date.now()}" alt="">` : `<span class="faint">${m.need ? "專屬" : "空"}</span>`}</div>
           <b>${esc(m.name)}</b>
           <small>${m.need ? (locked ? `🔒 親密度「${esc(pr.stages[m.need].name)}」解鎖（可以先放圖）` : "✨ 已解鎖") : "基本表情"}</small>
           <div class="row" style="justify-content:center;gap:6px">
@@ -1345,7 +1340,8 @@ async function pageRoom(el, keep = {}) {
         資料夾取名 <b>Lv10</b> 就是等級 10 解鎖，取名 <b>ACE</b> 就是打出 ACE 解鎖，其他名字直接可以穿。</p>
       <div class="chips"><button class="chip ${!pr.outfit ? "on" : ""}" data-outfit="">基本造型</button>
         ${pr.outfits.map((o) => `<button class="chip ${o.name === pr.outfit ? "on" : ""} ${o.unlocked ? "" : "lockedchip"}" data-outfit="${esc(o.name)}" ${o.unlocked ? "" : "disabled"}>${o.unlocked ? "" : "🔒 "}${esc(o.name)}${o.unlocked ? "" : `（${esc(o.cond)}）`}</button>`).join("")}</div>
-      <button class="btn ghost" id="rFolder" style="margin-top:10px">📂 打開自訂圖片資料夾</button></div>` : ""}
+      <button class="btn ghost" id="rFolder" style="margin-top:10px">📂 打開這個角色的資料夾</button>
+      <button class="btn ghost" id="rDelChar" style="margin:10px 0 0 6px;color:var(--loss)">🗑 刪除這個角色</button></div>` : ""}
 
     <div class="grid g2 section">
       <div class="card"><h3>💬 對話框</h3>
@@ -1393,12 +1389,26 @@ async function pageRoom(el, keep = {}) {
     };
     rd.readAsDataURL(file);
   });
-  if ($("#rCNameSave", el)) $("#rCNameSave", el).onclick = async () => { await api("/api/settings", { buddy_custom_name: $("#rCName", el).value }); toast("名字已儲存 ✓"); rerender(); };
+  $("#rNewChar", el).onclick = async () => {
+    const name = prompt("新角色的名字？", "");
+    if (!name) return;
+    await api("/api/characters/create", { name });
+    await refreshStatus();
+    toast(`已新增「${name}」，去上傳表情圖吧 ✓`);
+    rerender();
+  };
+  if (isCustom) bindPersona(el, P, rerender);
   el.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => { await api("/api/buddy/remove", { mood: b.dataset.rm }); rerender(); });
   el.querySelectorAll("[data-frame]").forEach((b) => b.onclick = async () => { await api("/api/progress/frame", { frame: b.dataset.frame }); rerender(); });
   el.querySelectorAll("[data-outfit]").forEach((b) => b.onclick = async () => {
     try { await api("/api/progress/outfit", { outfit: b.dataset.outfit }); rerender(); } catch (e) { toast(e.message); }
   });
+  if ($("#rDelChar", el)) $("#rDelChar", el).onclick = async () => {
+    if (!confirm(`確定刪除「${sk.custom_name || "這個角色"}」？圖片和角色設定都會刪掉（等級不會受影響）。`)) return;
+    await api("/api/characters/delete", { id: sk.char });
+    await refreshStatus();
+    rerender();
+  };
   if ($("#rFolder", el)) $("#rFolder", el).onclick = () => api("/api/open-folder", { which: "buddy" }).then((r) => toast("資料夾：" + r.path, 4000));
   $("#rNickSave", el).onclick = async () => { await api("/api/progress/nickname", { nickname: $("#rNick", el).value }); toast("角色記住你的名字了 💕"); };
   // 自訂圖片的配件位置：拉動就即時預覽，放開才存
@@ -1410,7 +1420,7 @@ async function pageRoom(el, keep = {}) {
         sk.adjust = { ...(sk.adjust || {}), [id]: read() };
         $("#roomBot", el).innerHTML = window.renderBuddy(skinId, mood, pr.equipped, { customSrc: customSrcOf(sk, mood), adjust: sk.adjust });
       };
-      inp.onchange = () => { const v = read(); api("/api/progress/adjust", { skin: "custom", item: id, ...v }); };
+      inp.onchange = () => { const v = read(); api("/api/progress/adjust", { skin: skinId, item: id, ...v }); };
     });
   });
   // 語音
@@ -1447,6 +1457,61 @@ function levelUpBox(ev) {
   wrap.querySelector("[data-go]").onclick = () => { wrap.remove(); location.hash = "#/room"; };
   wrap.querySelector("[data-x]").onclick = () => wrap.remove();
   document.body.appendChild(wrap);
+}
+
+
+/* ================= 角色設定（個性、語氣、台詞） ================= */
+const MOOD_LABEL = { happy: "平常", wow: "驚喜（打得好）", sad: "難過（被殺）", cheer: "加油", comfort: "加碼安慰（連敗）", proud: "傲嬌的肯定（打得特別好）", daily: "專屬日常（閒聊）" };
+const STAGE_NAMES = ["初次見面", "熟悉", "好朋友", "最佳戰友"];
+function personaCard(P) {
+  const p = P.persona;
+  const lines = p.lines || {};
+  return `<div class="card section persona"><h3>🎭 角色設定 <span class="hint">AI 會照這份設定講話；沒接 AI 時用下面的台詞</span></h3>
+    <div class="row" style="gap:16px;flex-wrap:wrap">
+      <label class="switch" style="padding:0"><input type="checkbox" id="pOn" ${p.enabled ? "checked" : ""}><span></span><div><b>使用角色設定</b></div></label>
+      <div class="field" style="margin:0;flex:1;min-width:200px"><label>角色名字</label><input id="pName" value="${esc(p.name || "")}" maxlength="16" placeholder="例如：艾莉"></div>
+    </div>
+    <div class="field"><label>個性與說話方式（給 AI 看的設定）</label><textarea id="pPrompt" rows="8">${esc(p.prompt || "")}</textarea></div>
+    <details><summary><b>四個親密度階段的語氣與稱呼</b></summary>
+      <div class="ptones">${STAGE_NAMES.map((n, i) => `<div class="ptone"><b>${n}</b>
+        <input data-addr="${i}" value="${esc((p.address || [])[i] || "{n}")}" title="稱呼玩家的方式，{n} 會換成你的暱稱">
+        <textarea data-tone="${i}" rows="2">${esc((p.tones || [])[i] || "")}</textarea></div>`).join("")}</div>
+      <div class="faint" style="font-size:12px">稱呼欄位的 {n} 會換成你的暱稱，例如「{n}同學」。</div></details>
+    <details><summary><b>口頭禪</b>（一行一句）</summary><textarea id="pCatch" rows="4">${esc((p.catchphrases || []).join("\n"))}</textarea></details>
+    <details><summary><b>各情境台詞</b>（沒接 AI 時用，一行一句；俄文後面加（翻譯））</summary>
+      <div class="plines">${Object.keys(MOOD_LABEL).map((m) => `<div><label>${MOOD_LABEL[m]}</label><textarea data-line="${m}" rows="4">${esc((lines[m] || []).join("\n"))}</textarea></div>`).join("")}</div></details>
+    <div class="row" style="margin-top:12px"><button class="btn" id="pSave">儲存角色設定</button>
+      <button class="btn ghost" id="pTest">💬 讓角色說一句看看</button>
+      ${P.has_template ? `<button class="btn ghost" id="pReset">↩ 還原成預設範本</button>` : ""}</div>
+  </div>`;
+}
+function bindPersona(el, P, rerender) {
+  const read = () => {
+    const lines = {};
+    el.querySelectorAll("[data-line]").forEach((t) => { lines[t.dataset.line] = t.value.split("\n").map((x) => x.trim()).filter(Boolean); });
+    return {
+      enabled: $("#pOn", el).checked, name: $("#pName", el).value.trim(), prompt: $("#pPrompt", el).value.trim(),
+      tones: [...el.querySelectorAll("[data-tone]")].map((t) => t.value.trim()),
+      address: [...el.querySelectorAll("[data-addr]")].map((t) => t.value.trim() || "{n}"),
+      catchphrases: $("#pCatch", el).value.split("\n").map((x) => x.trim()).filter(Boolean), lines,
+    };
+  };
+  $("#pSave", el).onclick = async () => {
+    try { await api("/api/persona", { char: P.char, persona: read() }); toast("角色設定已儲存 ✓"); rerender(); } catch (e) { toast(e.message, 4000); }
+  };
+  if ($("#pReset", el)) $("#pReset", el).onclick = async () => {
+    if (!confirm("還原成預設範本？你改過的內容會不見。")) return;
+    await api("/api/persona/reset", { char: P.char });
+    toast("已還原 ✓");
+    rerender();
+  };
+  $("#pTest", el).onclick = async () => {
+    try {
+      await api("/api/persona", { char: P.char, persona: read() });
+      const r = await api("/api/buddy/test", {});
+      alertBox(`${esc(read().name || "角色")}說：「${esc(r.line)}」${r.error ? `<br><span class="err" style="font-size:13px">（AI 沒回應，先用離線台詞：${esc(r.error)}）</span>` : ""}`);
+    } catch (e) { toast(e.message, 4000); }
+  };
 }
 
 /* ---------------- 路由 ---------------- */

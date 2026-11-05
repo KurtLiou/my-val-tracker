@@ -90,17 +90,29 @@
   // 養成解鎖的表情，原創角色用最接近的基本表情
   const BASE_MOOD = { comfort: "sad", proud: "wow", daily: "happy" };
   window.BASE_MOOD = BASE_MOOD;
+  // 自訂角色缺某個表情時，依序找最接近的圖（例如沒有「難過」就用「加碼安慰」，再沒有就用「加油」）
+  window.MOOD_FALLBACK = { happy: ["daily"], wow: ["proud", "cheer"], sad: ["comfort", "cheer"], cheer: ["proud", "wow"],
+    comfort: ["sad", "cheer"], proud: ["wow", "cheer"], daily: ["happy"] };
+  window.pickMoodFile = function (files, mood) {
+    const stem = (f) => f.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase();
+    for (const m of [mood, ...(window.MOOD_FALLBACK[mood] || []), "happy", "default"]) {
+      const f = files.find((x) => stem(x) === m);
+      if (f) return f;
+    }
+    return files[0] || null;
+  };
   window.renderBuddy = function (skin, mood, items, opt = {}) {
     items = items || [];
-    if (skin !== "custom") mood = BASE_MOOD[mood] || mood;
+    const isCustom = String(skin).startsWith("custom");
+    if (!isCustom) mood = BASE_MOOD[mood] || mood;
     const sk = window.SKINS[skin] || window.SKINS.jiujiu;
     let body;
-    if (skin === "custom") {
+    if (isCustom) {
       body = opt.customSrc ? `<img src="${opt.customSrc}" alt="" style="width:100%;height:100%;object-fit:contain;display:block">` : window.SKINS.jiujiu.svg(mood);
     } else {
       body = sk.svg(mood).replace("<svg ", '<svg style="width:100%;height:100%;display:block" ');
     }
-    const adj = skin === "custom" ? (opt.adjust || {}) : null;
+    const adj = isCustom ? (opt.adjust || {}) : null;
     return `<div class="bud-stack" style="position:relative;width:100%;height:100%">
       ${layer(items, "back", skin, adj)}<div style="position:absolute;inset:0">${body}</div>${layer(items, "front", skin, adj)}</div>`;
   };

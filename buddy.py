@@ -127,8 +127,28 @@ def _parse(text):
     return (line[:40] or random.choice(OFFLINE_LINES["cheer"])), "happy"
 
 
+def _persona_ctx():
+    """（角色設定或 None, 親密度階段, 暱稱, 關係說明）"""
+    import persona
+    try:
+        import progress
+        rel, stage, nick = progress.ai_context(store.profile().get("name") or "")
+    except Exception:
+        rel, stage, nick = "", 0, ""
+    return persona.active(), stage, nick, rel
+
+
 def ask_ai(cfg, img_b64):
     recent = "、".join(_history[-4:]) or "（還沒說過）"
+    p, stage, nick, rel_ctx = _persona_ctx()
+    if p:
+        import persona
+        moods, _ = allowed_moods()
+        mood_txt = "、".join(f"{m}={MOOD_DESC[m]}" for m in moods)
+        sys_prompt = persona.system_prompt(p, stage, nick)
+        mem = "\n".join(l for l in rel_ctx.splitlines() if l.startswith("你們的共同回憶"))
+        user = f"{mem}\n可用表情：{mood_txt}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
+        return _call_ai(cfg, img_b64, sys_prompt, user)
     try:
         import progress
         rel = progress.ai_context(store.profile().get("name") or "")[0]
@@ -137,15 +157,21 @@ def ask_ai(cfg, img_b64):
     moods, _ = allowed_moods()
     mood_txt = "、".join(f"{m}={MOOD_DESC[m]}" for m in moods)
     cfg2 = store.settings()
-    who = {"jiujiu": "啾啾"}.get(cfg2.get("buddy_skin"), cfg2.get("buddy_custom_name") or "啾啾")
+    cid = store.current_char()
+    import persona as _p
+    who = (_p.load(cid).get("name") if cid else "") or "啾啾"
     rel = f"這次你的名字是「{who}」（不是啾啾的話就用這個名字自稱）。\n" + rel
     user = f"{rel}\n可用表情：{mood_txt}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
+    return _call_ai(cfg, img_b64, SYSTEM_PROMPT, user)
+
+
+def _call_ai(cfg, img_b64, system_prompt, user):
     provider, key = cfg.get("buddy_provider"), cfg.get("buddy_key")
     if provider == "gemini":
         model = cfg.get("buddy_model") or "gemini-2.5-flash"
         r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                   {"x-goog-api-key": key}, {
-                      "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                      "system_instruction": {"parts": [{"text": system_prompt}]},
                       "contents": [{"parts": [{"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
                                               {"text": user}]}],
                       "generationConfig": {"maxOutputTokens": 120, "temperature": 1.0,
@@ -158,7 +184,7 @@ def ask_ai(cfg, img_b64):
         model = cfg.get("buddy_model") or "claude-haiku-5-5"
         r = _post("https://api.anthropic.com/v1/messages",
                   {"x-api-key": key, "anthropic-version": "2023-06-01"}, {
-                      "model": model, "max_tokens": 120, "system": SYSTEM_PROMPT,
+                      "model": model, "max_tokens": 120, "system": system_prompt,
                       "messages": [{"role": "user", "content": [
                           {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
                           {"type": "text", "text": user}]}],
@@ -168,6 +194,13 @@ def ask_ai(cfg, img_b64):
 
 
 def offline_line():
+    p, stage, nick, _ = _persona_ctx()
+    if p:
+        import persona
+        mood = "daily" if stage >= 2 and random.random() < 0.2 else random.choice(["happy", "cheer"])
+        line = persona.line_for(p, mood, stage, nick, avoid=_history[-4:])
+        if line:
+            return line, mood
     try:
         import progress
         _, stage, nick = progress.ai_context(store.profile().get("name") or "")
@@ -185,9 +218,19 @@ DAILY_LINES = ["{n}，今天有好好吃飯嗎？", "陪你打遊戲的時間最
                "累了的話休息一下也沒關係喔", "下一場也要一起！"]
 
 
+def persona_line(mood, fallback):
+    """有角色設定就用角色自己的台詞。"""
+    p, stage, nick, _ = _persona_ctx()
+    if p:
+        import persona
+        return persona.line_for(p, mood, stage, nick, avoid=_history[-4:]) or fallback
+    return fallback
+
+
 def say(line, mood="happy", speak=True):
+    import persona
     with _lock:
-        _state.update(line=line, mood=mood, t=time.time())
+        _state.update(line=persona.display(line), mood=mood, t=time.time())
         _history.append(line)
         del _history[:-10]
     if speak and store.settings().get("voice_enabled") and state()["active"]:
@@ -210,7 +253,8 @@ def one_cycle():
     else:
         line, mood = offline_line()
     say(line, mood)
-    return {"line": line, "mood": mood, "error": _state["error"]}
+    import persona
+    return {"line": persona.display(line), "raw": line, "mood": mood, "error": _state["error"]}
 
 
 # ---------------- 控制 ----------------
@@ -263,7 +307,7 @@ def start_match():
     _ensure_loop()
     with _lock:
         _state["active"] = True
-    say("開打囉！啾啾陪你 ✨", "cheer")
+    say(persona_line("cheer", "開打囉！啾啾陪你 ✨"), "cheer")
     open_window()
 
 
@@ -273,14 +317,14 @@ def end_match(won=None):
     moods, _ = allowed_moods()
     if won is True:
         if "proud" in moods:
-            say("哼、哼！這次就勉強誇你一下好了 🏆", "proud")
+            say(persona_line("proud", "哼、哼！這次就勉強誇你一下好了 🏆"), "proud")
         else:
-            say("贏了！你是最棒的 🏆", "wow")
+            say(persona_line("wow", "贏了！你是最棒的 🏆"), "wow")
     elif won is False:
         if "comfort" in moods:
-            say("沒關係，我一直都在 💗 下一場一起贏回來", "comfort")
+            say(persona_line("comfort", "沒關係，我一直都在 💗 下一場一起贏回來"), "comfort")
         else:
-            say("辛苦了，下一場一定贏 💕", "sad")
+            say(persona_line("sad", "辛苦了，下一場一定贏 💕"), "sad")
 
 
 def open_setup(port=None):
@@ -293,7 +337,7 @@ def preview(port=None, seconds=45):
     _ensure_loop()
     with _lock:
         _state["preview_until"] = time.time() + seconds
-    say("嗨～我是啾啾！對戰時我會在這裡陪你 💕", "wow")
+    say(persona_line("happy", "嗨～我是啾啾！對戰時我會在這裡陪你 💕"), "wow")
     open_window(port)
 
 

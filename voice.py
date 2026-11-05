@@ -30,26 +30,38 @@ VOICES = [
 _speaking = threading.Lock()
 _install_state = {"tried": False, "ok": None, "error": None}
 
+RU_VOICE = "ru-RU-SvetlanaNeural"
+
+# 依序播放多個檔案（俄文段、中文段）
 _PS_PLAY = r"""
 Add-Type -AssemblyName PresentationCore
-$p = New-Object System.Windows.Media.MediaPlayer
-$p.Volume = [double]$env:VT_VOL
-$p.Open([uri]$env:VT_FILE)
-$i = 0; while (-not $p.NaturalDuration.HasTimeSpan -and $i -lt 60) { Start-Sleep -Milliseconds 100; $i++ }
-$p.Play()
-$d = 4000; if ($p.NaturalDuration.HasTimeSpan) { $d = $p.NaturalDuration.TimeSpan.TotalMilliseconds }
-Start-Sleep -Milliseconds ([int]$d + 300)
-$p.Close()
+foreach ($f in ($env:VT_FILES -split '\|')) {
+  $p = New-Object System.Windows.Media.MediaPlayer
+  $p.Volume = [double]$env:VT_VOL
+  $p.Open([uri]$f)
+  $i = 0; while (-not $p.NaturalDuration.HasTimeSpan -and $i -lt 60) { Start-Sleep -Milliseconds 100; $i++ }
+  $p.Play()
+  $d = 3000; if ($p.NaturalDuration.HasTimeSpan) { $d = $p.NaturalDuration.TimeSpan.TotalMilliseconds }
+  Start-Sleep -Milliseconds ([int]$d + 120)
+  $p.Close()
+}
 """
 
+# Windows 內建語音：每段用對應語言的聲音；電腦沒有俄文語音的話就念中文翻譯
 _PS_SAPI = r"""
 Add-Type -AssemblyName System.Speech
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$v = $s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo } | Where-Object { $_.Culture.Name -like 'zh*' } | Select-Object -First 1
-if ($v) { $s.SelectVoice($v.Name) }
 $s.Rate = [int]$env:VT_RATE
 $s.Volume = [int]$env:VT_VOL
-$s.Speak($env:VT_TEXT)
+$all = $s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo }
+$zh = $all | Where-Object { $_.Culture.Name -like 'zh*' } | Select-Object -First 1
+$ru = $all | Where-Object { $_.Culture.Name -like 'ru*' } | Select-Object -First 1
+foreach ($seg in ($env:VT_SEGS | ConvertFrom-Json)) {
+  if ($seg.lang -eq 'ru') {
+    if ($ru) { $s.SelectVoice($ru.Name); $s.Speak($seg.text) }
+    elseif ($seg.alt) { if ($zh) { $s.SelectVoice($zh.Name) }; $s.Speak($seg.alt) }
+  } else { if ($zh) { $s.SelectVoice($zh.Name) }; $s.Speak($seg.text) }
+}
 """
 
 
@@ -101,10 +113,10 @@ def ensure_edge_tts():
     return False
 
 
-def _edge_file(text, cfg):
+def _edge_file(text, cfg, voice=None):
     import asyncio
     import edge_tts
-    voice = cfg.get("voice_name") or VOICES[0][0]
+    voice = voice or cfg.get("voice_name") or VOICES[0][0]
     rate = f'{int(cfg.get("voice_rate") or 0):+d}%'
     pitch = f'{int(cfg.get("voice_pitch") or 0):+d}Hz'
     key = hashlib.md5(f"{voice}|{rate}|{pitch}|{text}".encode()).hexdigest()
@@ -137,20 +149,28 @@ def speak(text, wait=False):
     if not _speaking.acquire(blocking=wait):
         return {"engine": None, "skipped": True}  # 上一句還在念，就跳過，不要疊在一起
 
+    import json
+    import persona
+    segs = persona.speech(text) or [("zh", text)]
+    # 每段俄文對應的中文翻譯（沒有俄文聲音時改念翻譯）
+    alts = [m.group(3) or "" for m in persona.RU_SEG.finditer(text)]
+
     def job():
         try:
             vol = max(0, min(100, int(cfg.get("voice_volume") or 70)))
             if cfg.get("voice_engine", "edge") == "edge" and ensure_edge_tts():
                 try:
-                    path = _edge_file(text, cfg)
-                    _ps(_PS_PLAY, {"VT_FILE": path, "VT_VOL": str(vol / 100)}, wait=True)
+                    files = [_edge_file(t, cfg, RU_VOICE if lang == "ru" else None) for lang, t in segs]
+                    _ps(_PS_PLAY, {"VT_FILES": "|".join(files), "VT_VOL": str(vol / 100)}, wait=True)
                     return {"engine": "edge"}
                 except Exception as e:
                     err = f"Edge 語音失敗，改用 Windows 內建語音（{e}）"
             else:
                 err = _install_state.get("error") if cfg.get("voice_engine", "edge") == "edge" else None
             rate = max(-10, min(10, round(int(cfg.get("voice_rate") or 0) / 10)))
-            _ps(_PS_SAPI, {"VT_TEXT": text, "VT_RATE": str(rate), "VT_VOL": str(vol)}, wait=True)
+            ru_i = iter(alts)
+            payload = [{"lang": lang, "text": t, "alt": next(ru_i, "") if lang == "ru" else ""} for lang, t in segs]
+            _ps(_PS_SAPI, {"VT_SEGS": json.dumps(payload, ensure_ascii=False), "VT_RATE": str(rate), "VT_VOL": str(vol)}, wait=True)
             return {"engine": "windows", "error": err}
         finally:
             _speaking.release()

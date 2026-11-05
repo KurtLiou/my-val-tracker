@@ -412,3 +412,18 @@ svg text { font-family: var(--font); }
 .slot-art { width: 96px; height: 96px; display: grid; place-items: center; background: repeating-conic-gradient(#2a3350 0 25%, #222a44 0 50%) 0 0 / 16px 16px; border-radius: 12px; overflow: hidden; }
 .slot-art img { width: 100%; height: 100%; object-fit: contain; }
 .btn.small { padding: 5px 10px; font-size: 12px; border-radius: 9px; cursor: pointer; }
+
+.charpick { display: flex; gap: 8px; flex-wrap: wrap; }
+.charbtn { border: 2px solid var(--line); background: var(--card2); color: var(--text); border-radius: 14px; padding: 6px; width: 78px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; font: inherit; font-size: 12px; }
+.charbtn.on { border-color: var(--lilac); background: rgba(169,139,255,.16); }
+.charart { width: 56px; height: 56px; display: grid; place-items: center; font-size: 24px; border-radius: 10px; overflow: hidden; }
+.charart img, .charart svg { width: 100%; height: 100%; object-fit: cover; }
+.persona textarea, .persona input { width: 100%; background: var(--bg2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; resize: vertical; }
+.persona details { margin-top: 10px; background: var(--card2); border-radius: 12px; padding: 10px 12px; }
+.persona summary { cursor: pointer; }
+.ptones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 6px; }
+.ptone { display: flex; flex-direction: column; gap: 6px; }
+.plines { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 10px; }
+.plines label { font-size: 12px; color: var(--dim); }
+@media (max-width: 760px) { .ptones { grid-template-columns: 1fr; } }

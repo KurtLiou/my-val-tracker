@@ -59,13 +59,12 @@ let skin = { skin: "jiujiu", files: [], size: "m" }, lastT = 0, hideTimer = null
 
 function art(mood) {
   let customSrc = null;
-  if (skin.skin === "custom") {
-    // 有穿自訂造型包就用造型包的圖，否則用資料夾裡的圖
+  if (String(skin.skin).startsWith("custom") && skin.char) {
+    // 有穿自訂造型包就用造型包的圖，否則用角色資料夾裡的圖
     const pack = (skin.outfits || []).find((o) => o.name === skin.outfit);
-    const files = pack ? pack.files.map((f) => pack.name + "/" + f) : skin.files;
-    const pickFile = (m) => files.find((f) => f.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase() === m);
-    const f = pickFile(mood) || pickFile(window.BASE_MOOD[mood]) || pickFile("happy") || pickFile("default") || files[0];
-    if (f) customSrc = "/custom-buddy/" + f.split("/").map(encodeURIComponent).join("/");
+    const files = pack ? pack.files.map((f) => pack.name + "/" + f) : (skin.files || []);
+    const f = window.pickMoodFile(files, mood);
+    if (f) customSrc = "/custom-buddy/" + [skin.char, ...f.split("/")].map(encodeURIComponent).join("/");
   }
   return window.renderBuddy(skin.skin, mood, skin.equipped || [], { customSrc, adjust: skin.adjust });
 }

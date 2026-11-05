@@ -27,6 +27,7 @@ ORIGIN = f"http://127.0.0.1:{PORT}"
 
 import autostart  # noqa: E402
 import buddy  # noqa: E402
+import persona  # noqa: E402
 import progress  # noqa: E402
 import voice  # noqa: E402
 import store  # noqa: E402
@@ -126,12 +127,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/buddy/skin":
             cfg = store.settings()
             f = progress.full()
-            return self._json({"skin": cfg["buddy_skin"], "size": cfg["buddy_size"], "files": store.buddy_images(),
+            cid = store.current_char()
+            return self._json({"skin": cfg["buddy_skin"], "char": cid, "size": cfg["buddy_size"],
+                               "files": store.char_files(cid) if cid else [],
                                "moods": [{"id": m, "name": n, "need": k} for m, n, k in store.BUDDY_MOODS],
-                               "bond": f["current_bond"]["index"], "custom_name": cfg["buddy_custom_name"],
+                               "bond": f["current_bond"]["index"],
+                               "custom_name": persona.load(cid).get("name") if cid else "",
+                               "characters": store.list_characters(),
                                "equipped": f["equipped"], "adjust": f["adjust"].get(cfg["buddy_skin"], {}),
-                               "frame": f["frame"], "level": f["level"], "outfits": store.buddy_outfits(),
-                               "outfit": f.get("outfit")})
+                               "frame": f["frame"], "level": f["level"],
+                               "outfits": store.char_outfits(cid) if cid else [], "outfit": f.get("outfit")})
+
+        if path == "/api/persona":
+            cid = q.get("char") or store.current_char()
+            if not cid:
+                return self._json({"error": "目前不是自訂角色"})
+            return self._json({"char": cid, "persona": persona.load(cid), "has_template": persona.has_template(cid)})
 
         if path == "/api/progress":
             if not DEMO:
@@ -140,9 +151,9 @@ class Handler(BaseHTTPRequestHandler):
                 p = demo.profile()
             return self._json(progress.full(p.get("name") or ""))
 
-        if path.startswith("/custom-buddy/"):
+        if path.startswith("/custom-buddy/"):  # /custom-buddy/<角色ID>/<檔名>
             from urllib.parse import unquote
-            return _file(self, store.BUDDY_IMG_DIR, unquote(path[len("/custom-buddy/"):]))
+            return _file(self, store.CHAR_DIR, unquote(path[len("/custom-buddy/"):]))
 
         if path == "/api/buddy/state":
             return self._json(buddy.state())
@@ -220,6 +231,25 @@ class Handler(BaseHTTPRequestHandler):
             buddy.preview(PORT)
             return self._json({"ok": True})
 
+        if path == "/api/characters/create":
+            cid = store.create_character(body.get("name"))
+            store.save_settings({"buddy_skin": "custom:" + cid})
+            return self._json({"id": cid})
+
+        if path == "/api/characters/delete":
+            cid = body.get("id")
+            if store.current_char() == cid:
+                store.save_settings({"buddy_skin": "jiujiu"})
+            store.delete_character(cid)
+            return self._json({"ok": True})
+
+        if path == "/api/persona":
+            cid = body.get("char") or store.current_char()
+            return self._json({"persona": persona.save(cid, body.get("persona") or {})})
+
+        if path == "/api/persona/reset":
+            return self._json({"persona": persona.reset(body.get("char") or store.current_char())})
+
         if path == "/api/progress/equip":
             return self._json({"equipped": progress.equip(body.get("skin") or store.settings()["buddy_skin"],
                                                           body.get("item"), bool(body.get("on")))})
@@ -256,10 +286,11 @@ class Handler(BaseHTTPRequestHandler):
             if len(raw) > 15 * 1024 * 1024:
                 return self._json({"error": "圖片太大（上限 15MB）"})
             ext = os.path.splitext(str(body.get("name") or ""))[1] or "." + data[11:data.index(";")]
-            return self._json({"file": store.save_buddy_image(body.get("mood"), raw, ext)})
+            cid = body.get("char") or store.current_char()
+            return self._json({"file": store.save_char_image(cid, body.get("mood"), raw, ext)})
 
         if path == "/api/buddy/remove":
-            store.remove_buddy_image(str(body.get("mood") or ""))
+            store.remove_char_image(body.get("char") or store.current_char(), str(body.get("mood") or ""))
             return self._json({"ok": True})
 
         if path == "/api/buddy/setup":  # 調整位置模式
@@ -297,7 +328,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"path": out})
 
         if path == "/api/open-folder":
-            folder = {"agents": store.AGENT_IMG_DIR, "buddy": store.BUDDY_IMG_DIR}.get(body.get("which"), PICTURES)
+            cid = store.current_char()
+            folder = {"agents": store.AGENT_IMG_DIR,
+                      "buddy": store.char_dir(cid) if cid else store.CHAR_DIR}.get(body.get("which"), PICTURES)
             os.makedirs(folder, exist_ok=True)
             if os.name == "nt":
                 os.startfile(folder)
@@ -375,9 +408,11 @@ def main():
     url = ORIGIN + "/"
     if not DEMO:
         autostart.mark_app_running(PORT)
-        # Claude 幫你放進 buddy_import 的圖：搬進自訂圖片資料夾，並切換成自訂角色
-        if store.import_buddy_seed(os.path.join(os.path.dirname(os.path.abspath(__file__)), "buddy_import")):
-            store.save_settings({"buddy_skin": "custom"})
+        # 舊版單一自訂角色 → 搬到 characters/；Claude 放進 buddy_import 的角色 → 匯入
+        store.migrate_legacy_custom()
+        got = store.import_character_seeds(os.path.join(os.path.dirname(os.path.abspath(__file__)), "buddy_import"))
+        if got and store.settings()["buddy_skin"] == "jiujiu":
+            store.save_settings({"buddy_skin": "custom:" + got[0]})
         service.start_monitor()
     if "--browser" in sys.argv or "--no-browser" in sys.argv:
         return _run_browser(server, url)
