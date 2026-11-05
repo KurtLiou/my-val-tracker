@@ -35,11 +35,13 @@ SYSTEM_PROMPT = """你是「啾啾」，一隻超可愛的漂浮小機器人吉�
 4. 不要重複最近說過的話。
 只回傳 JSON：{"line": "你要說的話", "mood": "happy|wow|sad|cheer"}"""
 
-OFFLINE_LINES = {
-    "cheer": ["你超棒的！繼續保持 ✨", "啾啾在這裡幫你加油！", "這回合交給你了！💪", "深呼吸，你可以的～",
-              "我相信你！", "手感慢慢來了喔 🔥", "穩穩打，我們贏得了！", "喝口水，保持冷靜 🧊"],
-    "happy": ["跟你一起打遊戲好開心 💕", "今天也要開開心心的～", "你操作好帥喔！", "陪你到最後一回合！"],
-}
+# 離線台詞：依親密度階段（0 初次見面 → 3 最佳戰友），{n} 會換成暱稱
+OFFLINE_BY_STAGE = [
+    ["加油喔！我會在旁邊幫你打氣 ✨", "第一次一起打，請多指教～", "這回合也要加油！", "深呼吸，你可以的～", "我相信你！"],
+    ["{n}，手感慢慢來了喔 🔥", "這回合交給你了！💪", "喝口水，保持冷靜 🧊", "跟你一起打遊戲好開心 💕", "穩穩打，我們贏得了！"],
+    ["{n}～你今天很帥欸！", "輸了也沒關係，我一直都在 💗", "{n} 衝啊！我幫你看著！", "剛剛那波我都看到了 ✨", "嘿嘿，有你在就安心"],
+    ["{n} 是我心中最強的！🏆", "不管輸贏我都挺你！", "我們一起走了好遠喔 💕", "{n}，這把也拜託你了！", "最佳戰友就是要一起贏！"],
+]
 
 _state = {"active": False, "line": "", "mood": "happy", "t": 0, "error": None, "preview_until": 0}
 _history = []
@@ -113,7 +115,12 @@ def _parse(text):
 
 def ask_ai(cfg, img_b64):
     recent = "、".join(_history[-4:]) or "（還沒說過）"
-    user = f"這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
+    try:
+        import progress
+        rel = progress.ai_context(store.profile().get("name") or "")[0]
+    except Exception:
+        rel = ""
+    user = f"{rel}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
     provider, key = cfg.get("buddy_provider"), cfg.get("buddy_key")
     if provider == "gemini":
         model = cfg.get("buddy_model") or "gemini-2.5-flash"
@@ -142,15 +149,27 @@ def ask_ai(cfg, img_b64):
 
 
 def offline_line():
-    pool = [x for x in OFFLINE_LINES["cheer"] + OFFLINE_LINES["happy"] if x not in _history[-4:]]
+    try:
+        import progress
+        _, stage, nick = progress.ai_context(store.profile().get("name") or "")
+    except Exception:
+        stage, nick = 0, ""
+    pool = [x.format(n=nick or "你") for x in OFFLINE_BY_STAGE[stage]]
+    pool = [x for x in pool if x not in _history[-4:]] or pool
     return random.choice(pool), random.choice(["happy", "cheer"])
 
 
-def say(line, mood="happy"):
+def say(line, mood="happy", speak=True):
     with _lock:
         _state.update(line=line, mood=mood, t=time.time())
         _history.append(line)
         del _history[:-10]
+    if speak and store.settings().get("voice_enabled") and state()["active"]:
+        try:
+            import voice
+            voice.speak(line)
+        except Exception:
+            pass
 
 
 def one_cycle():

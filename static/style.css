@@ -359,3 +359,48 @@ svg text { font-family: var(--font); }
 
 .diag { font-size: 13px; margin: 0 0 10px 56px; display: flex; flex-direction: column; gap: 2px; }
 .diag pre { background: var(--bg2); border-radius: 10px; padding: 8px 10px; font-size: 11px; white-space: pre-wrap; max-height: 180px; overflow: auto; margin: 6px 0 0; }
+
+/* ===== 角色房間 ===== */
+.room-top { display: grid; grid-template-columns: 300px 1fr; gap: 18px; background: linear-gradient(135deg, rgba(255,143,184,.14), var(--card) 55%);
+  border: 1px solid var(--line); border-radius: 24px; padding: 20px; }
+.room-stage { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.room-bot { width: 240px; height: 240px; animation: bob 3.2s ease-in-out infinite; filter: drop-shadow(0 10px 24px rgba(0,0,0,.45)); }
+.lvbig { font-size: 18px; font-weight: 700; color: var(--sun); background: var(--bg2); border-radius: 16px; padding: 8px 14px; }
+.lvbig b { font-size: 30px; }
+.xpbar { height: 12px; background: var(--bg2); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+.xpbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--sun), var(--peach)); border-radius: 99px; transition: width .6s; }
+.xpbar.bond i { background: linear-gradient(90deg, #ff8fb8, var(--lilac)); }
+.bondic { font-size: 30px; width: 58px; text-align: center; }
+.items { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.item { border: 2px solid var(--line); background: var(--card2); border-radius: 16px; padding: 10px 8px; color: var(--text); font: inherit; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; transition: .15s; }
+.item:hover { transform: translateY(-2px); }
+.item.on { border-color: var(--sun); background: rgba(255,209,102,.12); }
+.item.locked { opacity: .55; }
+.item.locked .item-art { filter: grayscale(1) brightness(.7); }
+.item small { color: var(--faint); font-size: 11px; text-align: center; }
+.item .hbar { width: 100%; height: 5px; }
+.item-art { width: 64px; height: 64px; }
+.adjs { display: grid; gap: 8px; }
+.adj { display: grid; grid-template-columns: 110px repeat(3, 1fr); gap: 10px; align-items: center; font-size: 12px; background: var(--card2); padding: 8px 12px; border-radius: 12px; }
+.adj label { display: flex; gap: 6px; align-items: center; color: var(--dim); }
+.adj input { flex: 1; }
+.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.frame-btn { border: 2px solid var(--line); background: var(--card2); border-radius: 14px; padding: 14px 8px 8px; cursor: pointer; color: var(--text); font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.frame-btn.on { border-color: var(--lilac); } .frame-btn.locked { opacity: .5; cursor: default; }
+.frame-btn small { font-size: 11px; color: var(--faint); text-align: center; }
+.bubble-mini { position: relative; background: #fff; color: #1b2036; font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 14px 14px 4px 14px; }
+.bubble-mini.f-star { border: 2px solid #ffd166; } .bubble-mini.f-heart { border: 2px solid #ff8fb8; }
+.bubble-mini.f-neon { background: #12162b; color: #fff; border: 2px solid #4fe3b5; box-shadow: 0 0 10px #4fe3b5; }
+.bubble-mini.f-gold { background: linear-gradient(135deg, #fff6d6, #ffe08a); border: 2px solid #e0a800; }
+.sel { background: var(--bg2); border: 1px solid var(--line); color: var(--text); padding: 8px 10px; border-radius: 10px; font: inherit; }
+.slider { display: grid; grid-template-columns: 40px 1fr 36px; gap: 8px; align-items: center; font-size: 13px; color: var(--dim); margin: 4px 0; }
+.slider span { text-align: right; font-variant-numeric: tabular-nums; }
+.mems { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow: auto; }
+.mem { display: flex; gap: 10px; align-items: center; background: var(--card2); border-radius: 12px; padding: 8px 10px; }
+.lockedchip { opacity: .5; }
+.lvup { position: relative; overflow: hidden; }
+.confetti span { position: absolute; top: -20px; left: calc(var(--i) * 5%); font-size: 20px; animation: fall 2.4s ease-in calc(var(--i) * .08s) infinite; }
+@keyframes fall { to { transform: translateY(520px) rotate(360deg); opacity: 0; } }
+@media (max-width: 900px) { .room-top { grid-template-columns: 1fr; } .adj { grid-template-columns: 1fr; } }

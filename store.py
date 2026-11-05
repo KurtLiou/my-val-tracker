@@ -34,7 +34,9 @@ DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_co
                     "update_repo": "", "auto_sync": True, "show_enemies": True,
                     "buddy_enabled": True, "buddy_provider": "none", "buddy_key": "", "buddy_model": "",
                     "buddy_interval": 20, "buddy_clickthrough": True,
-                    "buddy_skin": "jiujiu", "buddy_size": "m", "buddy_x": None, "buddy_y": None}
+                    "buddy_skin": "jiujiu", "buddy_size": "m", "buddy_x": None, "buddy_y": None,
+                    "voice_enabled": True, "voice_engine": "edge", "voice_name": "zh-TW-HsiaoYuNeural",
+                    "voice_rate": 5, "voice_pitch": 10, "voice_volume": 70}
 
 
 def settings():
@@ -59,6 +61,14 @@ def save_settings(new):
         cur["buddy_size"] = "m"
     for k in ("buddy_x", "buddy_y"):
         cur[k] = int(cur[k]) if isinstance(cur.get(k), (int, float)) else None
+    cur["voice_enabled"] = bool(cur.get("voice_enabled"))
+    if cur.get("voice_engine") not in ("edge", "windows"):
+        cur["voice_engine"] = "edge"
+    for k, lo, hi in (("voice_rate", -30, 50), ("voice_pitch", -20, 40), ("voice_volume", 0, 100)):
+        try:
+            cur[k] = max(lo, min(hi, int(cur.get(k) or 0)))
+        except (TypeError, ValueError):
+            cur[k] = DEFAULT_SETTINGS[k]
     if cur.get("buddy_provider") not in ("none", "gemini", "claude"):
         cur["buddy_provider"] = "none"
     _write(SETTINGS_PATH, cur)
@@ -180,3 +190,16 @@ os.makedirs(BUDDY_IMG_DIR, exist_ok=True)
 def buddy_images():
     return sorted(f for f in os.listdir(BUDDY_IMG_DIR)
                   if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")))
+
+
+def buddy_outfits():
+    """自訂造型包：buddy 資料夾裡的子資料夾，每個資料夾是一套造型（裡面放 happy.png 等）。
+    資料夾名稱用「Lv10」這種格式 → 等級 10 解鎖；「ACE」→ 打出 ACE 解鎖；其他名稱直接可用。"""
+    out = []
+    for name in sorted(os.listdir(BUDDY_IMG_DIR)):
+        full = os.path.join(BUDDY_IMG_DIR, name)
+        if os.path.isdir(full):
+            files = sorted(f for f in os.listdir(full) if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")))
+            if files:
+                out.append({"name": name, "files": files})
+    return out

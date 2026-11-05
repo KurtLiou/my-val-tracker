@@ -18,6 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 DEMO = "--demo" in sys.argv
+if DEMO:
+    os.environ["VALTRACKER_DEMO"] = "1"  # 展示模式的養成存檔分開放
 BASE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(BASE, "static")
 PORT = 8787  # 實際用的 port 在 main() 決定（被佔用就換一個）
@@ -25,6 +27,8 @@ ORIGIN = f"http://127.0.0.1:{PORT}"
 
 import autostart  # noqa: E402
 import buddy  # noqa: E402
+import progress  # noqa: E402
+import voice  # noqa: E402
 import store  # noqa: E402
 import stats  # noqa: E402
 import updater  # noqa: E402
@@ -121,7 +125,18 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/buddy/skin":
             cfg = store.settings()
-            return self._json({"skin": cfg["buddy_skin"], "size": cfg["buddy_size"], "files": store.buddy_images()})
+            f = progress.full()
+            return self._json({"skin": cfg["buddy_skin"], "size": cfg["buddy_size"], "files": store.buddy_images(),
+                               "equipped": f["equipped"], "adjust": f["adjust"].get(cfg["buddy_skin"], {}),
+                               "frame": f["frame"], "level": f["level"], "outfits": store.buddy_outfits(),
+                               "outfit": f.get("outfit")})
+
+        if path == "/api/progress":
+            if not DEMO:
+                p = store.profile()
+            else:
+                p = demo.profile()
+            return self._json(progress.full(p.get("name") or ""))
 
         if path.startswith("/custom-buddy/"):
             from urllib.parse import unquote
@@ -144,13 +159,16 @@ class Handler(BaseHTTPRequestHandler):
                                    "profile": p, "match_count": 40,
                                    "settings": {**store.settings(), "henrik_key": None, "buddy_key": None,
                                                 "henrik_key_set": False,
-                                                "buddy_key_set": bool(store.settings()["buddy_key"])}})
+                                                "buddy_key_set": bool(store.settings()["buddy_key"]),
+                                                "buddy_pos_set": store.settings()["buddy_x"] is not None}})
             return self._json(service.status())
 
         if path == "/api/stats":
             ms, me, p = _matches_and_me()
             if not me:
                 return self._json({"empty": True})
+            if DEMO:
+                progress.credit(ms, me)
             return self._json(stats.aggregate(ms, me, p, q.get("queue", "all"), store.known_names()))
 
         if path.startswith("/api/match/"):
@@ -199,6 +217,34 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/buddy/preview":
             buddy.preview(PORT)
             return self._json({"ok": True})
+
+        if path == "/api/progress/equip":
+            return self._json({"equipped": progress.equip(body.get("skin") or store.settings()["buddy_skin"],
+                                                          body.get("item"), bool(body.get("on")))})
+
+        if path == "/api/progress/frame":
+            progress.set_frame(body.get("frame") or "default")
+            return self._json({"ok": True})
+
+        if path == "/api/progress/adjust":
+            progress.adjust(body.get("skin") or "custom", body.get("item"), body.get("x", 0), body.get("y", 0), body.get("s", 1))
+            return self._json({"ok": True})
+
+        if path == "/api/progress/nickname":
+            progress.set_nickname(body.get("nickname"))
+            return self._json({"ok": True})
+
+        if path == "/api/progress/outfit":
+            progress.set_outfit(body.get("outfit") or "")
+            return self._json({"ok": True})
+
+        if path == "/api/names":  # 前端傳來的中文名稱（給 AI 講回憶用）
+            progress.NAMES["maps"].update(body.get("maps") or {})
+            progress.NAMES["agents"].update(body.get("agents") or {})
+            return self._json({"ok": True})
+
+        if path == "/api/voice/test":
+            return self._json(voice.speak(str(body.get("text") or "嗨～我是你的陪伴角色！今天也一起加油吧！"), wait=True))
 
         if path == "/api/buddy/setup":  # 調整位置模式
             if body.get("reset"):

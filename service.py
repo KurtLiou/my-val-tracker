@@ -32,6 +32,7 @@ def status():
             "buddy_key_set": bool(s["buddy_key"]), "buddy_model": s["buddy_model"],
             "buddy_interval": s["buddy_interval"], "buddy_clickthrough": s["buddy_clickthrough"],
             "buddy_skin": s["buddy_skin"], "buddy_size": s["buddy_size"], "buddy_pos_set": s["buddy_x"] is not None,
+            **{k: s[k] for k in ("voice_enabled", "voice_engine", "voice_name", "voice_rate", "voice_pitch", "voice_volume")},
         },
     }
 
@@ -173,6 +174,27 @@ def _sync_henrik(count):
     return new
 
 
+def credit_progress():
+    """把新對局算進養成，有升級／解鎖就發通知、讓陪伴角色說話。"""
+    import progress
+    p = store.profile()
+    me = p.get("puuid")
+    if not me:
+        return []
+    evs = progress.credit(store.all_matches(me), me)
+    names = {i[0]: i[1] for i in progress.ITEMS}
+    for ev in evs:
+        push_event("progress", sub=ev["kind"], **{k: v for k, v in ev.items() if k != "kind"})
+        if ev["kind"] == "level_up":
+            buddy.say(f"升到 Lv.{ev['level']} 了！好厲害 🎉", "wow")
+        elif ev["kind"] == "unlock":
+            got = [names.get(i, "新對話框") for i in ev["items"]]
+            buddy.say(f"解鎖了{'、'.join(got[:2])}！快來換上 ✨", "wow")
+        elif ev["kind"] == "bond_up":
+            buddy.say(f"我們變成「{ev['stage']}」了耶 💕", "wow")
+    return evs
+
+
 def sync(count=None):
     count = count or store.settings()["sync_count"]
     errors = []
@@ -233,7 +255,12 @@ def events_since(eid):
 
 def locked_sync(count=None):
     with _sync_lock:
-        return sync(count)
+        r = sync(count)
+    try:
+        r["progress"] = credit_progress()
+    except Exception:
+        pass
+    return r
 
 
 def _last_match_event():
@@ -287,3 +314,11 @@ def _monitor():
 
 def start_monitor():
     threading.Thread(target=_monitor, daemon=True).start()
+    threading.Thread(target=lambda: _quiet(credit_progress), daemon=True).start()  # 開 App 時補算舊對局
+
+
+def _quiet(fn):
+    try:
+        fn()
+    except Exception:
+        pass

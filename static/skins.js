@@ -111,3 +111,78 @@
     custom: { name: "自訂圖片", desc: "用你自己的圖片", svg: null },
   };
 })();
+
+/* ================= 養成配件（100×100 座標，對齊原創角色的頭／臉／脖子） ================= */
+(function () {
+  const A = {
+    headphones: { layer: "front", svg: `<path d="M23 48 Q22 13 50 13 Q78 13 77 48" stroke="#2b2f45" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <rect x="15" y="40" width="11" height="18" rx="5" fill="#ff4f64" stroke="#2b2f45" stroke-width="2"/>
+      <rect x="74" y="40" width="11" height="18" rx="5" fill="#ff4f64" stroke="#2b2f45" stroke-width="2"/>
+      <circle cx="20.5" cy="49" r="2.5" fill="#4fe3b5"/><circle cx="79.5" cy="49" r="2.5" fill="#4fe3b5"/>` },
+    heartclip: { layer: "front", svg: `<path d="M30 36 c-4 -6 -12 -1 -7 5 l7 6 l7 -6 c5 -6 -3 -11 -7 -5z" fill="#ff5c8a" stroke="#fff" stroke-width="1.2"/>` },
+    catears: { layer: "front", svg: `<path d="M24 32 L27 8 L42 22z" fill="#2b2f45"/><path d="M27 27 L29 14 L37 22z" fill="#ff9ec0"/>
+      <path d="M76 32 L73 8 L58 22z" fill="#2b2f45"/><path d="M73 27 L71 14 L63 22z" fill="#ff9ec0"/>` },
+    crown: { layer: "front", svg: `<path d="M33 22 L35 6 L43 15 L50 3 L57 15 L65 6 L67 22z" fill="#ffd166" stroke="#e0a800" stroke-width="1.5" stroke-linejoin="round"/>
+      <rect x="33" y="20" width="34" height="5" rx="2" fill="#ffbf2e"/>
+      <circle cx="50" cy="13" r="2.4" fill="#ff4f64"/><circle cx="41" cy="17" r="1.6" fill="#5ab8ff"/><circle cx="59" cy="17" r="1.6" fill="#4fe3b5"/>` },
+    headband: { layer: "front", svg: `<path d="M24 38 Q50 30 76 38 L76 44 Q50 36 24 44z" fill="#ff4f64"/>
+      <path d="M76 40 l12 -4 l-4 7 l5 5 l-13 -3z" fill="#e03a52"/><path d="M45 34 l5 3 l5 -3" stroke="#fff" stroke-width="1.5" fill="none"/>` },
+    sunglasses: { layer: "front", svg: `<rect x="30" y="50" width="17" height="11" rx="4" fill="#1b2036"/><rect x="53" y="50" width="17" height="11" rx="4" fill="#1b2036"/>
+      <path d="M47 54 h6" stroke="#1b2036" stroke-width="2.5"/><path d="M32 52 l6 0" stroke="#7fc7ff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>
+      <path d="M55 52 l6 0" stroke="#7fc7ff" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>` },
+    halo: { layer: "front", svg: `<ellipse cx="50" cy="9" rx="17" ry="4.5" fill="none" stroke="#fff3b0" stroke-width="3.5"/>
+      <ellipse cx="50" cy="9" rx="17" ry="4.5" fill="none" stroke="#ffd166" stroke-width="1.5"/>` },
+    scarf: { layer: "front", svg: `<path d="M33 76 Q50 86 67 76 L68 83 Q50 93 32 83z" fill="#ff4f64"/>
+      <path d="M38 79 l3 7 M46 81 l2 7 M54 81 l-1 7 M62 79 l-3 7" stroke="#fff" stroke-width="2" opacity=".85"/>
+      <path d="M60 82 l4 16 l7 -2 l-4 -15z" fill="#e03a52"/>` },
+    cape: { layer: "back", svg: `<path d="M27 78 Q12 92 14 100 L86 100 Q88 92 73 78 Q50 70 27 78z" fill="#7a2bff"/>
+      <path d="M27 78 Q50 72 73 78" stroke="#ffd166" stroke-width="2.5" fill="none"/>` },
+    fire: { layer: "back", svg: `<g opacity=".9"><path d="M14 92 Q6 66 18 48 Q20 62 26 60 Q22 40 34 26 Q34 44 40 42 Q42 24 50 14 Q58 24 60 42 Q66 44 66 26 Q78 40 74 60 Q80 62 82 48 Q94 66 86 92z" fill="#ff7a2e"/>
+      <path d="M22 92 Q16 74 26 62 Q30 74 36 70 Q34 54 44 44 Q46 58 50 56 Q54 58 56 44 Q66 54 64 70 Q70 74 74 62 Q84 74 78 92z" fill="#ffd166"/></g>` },
+    wings: { layer: "back", svg: `<path d="M30 62 Q4 40 2 62 Q6 72 14 70 Q6 80 16 84 Q22 80 30 76z" fill="#e8f0ff" stroke="#a98bff" stroke-width="1.5"/>
+      <path d="M70 62 Q96 40 98 62 Q94 72 86 70 Q94 80 84 84 Q78 80 70 76z" fill="#e8f0ff" stroke="#a98bff" stroke-width="1.5"/>
+      <circle cx="10" cy="58" r="1.5" fill="#ffd166"/><circle cx="90" cy="58" r="1.5" fill="#ffd166"/>` },
+    goldaura: { layer: "back", svg: `<defs><radialGradient id="ga"><stop offset=".45" stop-color="#ffd166" stop-opacity=".7"/><stop offset="1" stop-color="#ffd166" stop-opacity="0"/></radialGradient></defs>
+      <circle cx="50" cy="55" r="50" fill="url(#ga)"/>` },
+    bestie: { layer: "front", svg: `<path d="M57 82 l4 10 l3 -7 l3 7 l4 -10z" fill="#5ab8ff"/><circle cx="64" cy="82" r="6.5" fill="#ffd166" stroke="#e0a800" stroke-width="1.2"/>
+      <path d="M64 78.5 l1 2.2 2.4 .3 -1.8 1.7 .5 2.4 -2.1-1.1 -2.1 1.1 .5-2.4 -1.8-1.7 2.4-.3z" fill="#fff"/>` },
+  };
+  const NAMES = { headphones: "電競耳機", heartclip: "愛心髮夾", catears: "貓耳髮箍", crown: "ACE 皇冠", headband: "戰術頭帶",
+    sunglasses: "酷酷墨鏡", halo: "天使光環", scarf: "冬季圍巾", cape: "殘局王披風", fire: "連勝火焰", wings: "星光翅膀",
+    goldaura: "傳說金光", bestie: "最佳戰友徽章" };
+  // 啾啾的頭比較圓、眼睛比較高，微調位置
+  const SKIN_FIX = { jiujiu: { face: "translate(0,-6)", neck: "translate(0,8)", head: "translate(0,2)" } };
+  const SLOT = { headphones: "head", heartclip: "head", catears: "head", crown: "head", headband: "head", halo: "head",
+    sunglasses: "face", scarf: "neck", bestie: "neck", cape: "back", wings: "back", fire: "back", goldaura: "back" };
+
+  function layer(items, which, skin, adjust) {
+    const parts = items.filter((i) => A[i] && A[i].layer === which).map((i) => {
+      const adj = adjust && adjust[i];
+      const fix = (SKIN_FIX[skin] || {})[SLOT[i]] || "";
+      const t = adj ? `translate(${adj.x},${adj.y}) translate(50,50) scale(${adj.s}) translate(-50,-50)` : fix;
+      return `<g transform="${t}">${A[i].svg}</g>`;
+    });
+    return parts.length ? `<svg viewBox="0 0 100 100" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible">${parts.join("")}</svg>` : "";
+  }
+
+  /* 疊好的角色：背後配件 → 角色 → 前面配件 */
+  window.renderBuddy = function (skin, mood, items, opt = {}) {
+    items = items || [];
+    const sk = window.SKINS[skin] || window.SKINS.jiujiu;
+    let body;
+    if (skin === "custom") {
+      body = opt.customSrc ? `<img src="${opt.customSrc}" alt="" style="width:100%;height:100%;object-fit:contain;display:block">` : window.SKINS.jiujiu.svg(mood);
+    } else {
+      body = sk.svg(mood).replace("<svg ", '<svg style="width:100%;height:100%;display:block" ');
+    }
+    const adj = skin === "custom" ? (opt.adjust || {}) : null;
+    return `<div class="bud-stack" style="position:relative;width:100%;height:100%">
+      ${layer(items, "back", skin, adj)}<div style="position:absolute;inset:0">${body}</div>${layer(items, "front", skin, adj)}</div>`;
+  };
+  window.ACCESSORIES = A;
+  window.ACCESSORY_NAMES = NAMES;
+  const VB = { headphones: "10 6 80 58", heartclip: "18 26 24 24", catears: "18 4 64 32", crown: "28 0 44 28", headband: "20 26 72 26",
+    sunglasses: "26 42 48 24", halo: "28 0 44 18", scarf: "26 70 50 32", cape: "8 66 84 36", fire: "4 10 92 90", wings: "0 36 100 52",
+    goldaura: "0 5 100 100", bestie: "52 72 24 24" };
+  window.accessoryIcon = (id) => `<svg viewBox="${VB[id] || "0 0 100 100"}" style="width:100%;height:100%">${A[id] ? A[id].svg : ""}</svg>`;
+})();

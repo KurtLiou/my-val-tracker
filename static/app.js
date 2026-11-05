@@ -152,6 +152,12 @@ async function loadAssets() {
     }
   } catch { /* ignore */ }
   A.loaded = ag.length > 0;
+  try {
+    const maps = {}, agents = {};
+    for (const [k, m] of Object.entries(A.maps)) if (k.startsWith("/Game")) maps[k] = m.name;
+    for (const [k, a] of Object.entries(A.agents)) agents[k] = a.name;
+    api("/api/names", { maps, agents });
+  } catch { /* ignore */ }
 }
 
 /* 遊戲座標 → 小地圖 0~1 座標（valorant-api 提供的換算參數） */
@@ -270,6 +276,7 @@ const PAGES = [
   ["matches", "對局紀錄", '<path d="M4 6h16M4 12h16M4 18h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'],
   ["agents", "特務・地圖・武器", '<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6" stroke="currentColor" stroke-width="2" fill="none"/>'],
   ["habits", "習慣分析", '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'],
+  ["room", "角色房間", '<path d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6C19 16.5 12 21 12 21z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>'],
   ["recap", "我的回顧", '<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/>'],
   ["live", "對戰中", '<circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/>'],
   ["lineups", "Lineup 影片庫", '<rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M10 9l5 3-5 3z" fill="currentColor"/>'],
@@ -1210,6 +1217,11 @@ async function pollEvents() {
         matchPopup(ev);
         refreshStatus();
         if (/^#\/(overview|matches|agents|habits|recap)?$/.test(location.hash || "#/")) route();
+      } else if (ev.kind === "progress") {
+        if (ev.sub === "level_up") levelUpBox(ev);
+        else if (ev.sub === "unlock") toast(`🎁 解鎖新東西了！到「角色房間」看看`, 5000);
+        else if (ev.sub === "bond_up") toast(`💞 親密度升級：${ev.stage}`, 5000);
+        else if (ev.sub === "backfill") toast(`已把以前的 ${ev.matches} 場算進養成，現在 Lv.${ev.level} 🎉`, 6000);
       } else if (ev.kind === "game_open") {
         toast("偵測到特戰英豪已開啟 🎮");
         refreshStatus();
@@ -1247,8 +1259,169 @@ function alertBox(html) {
   document.body.appendChild(wrap);
 }
 
+
+/* ================= 角色房間（陪伴角色養成） ================= */
+const MOODS = [["happy", "平常"], ["wow", "驚喜"], ["sad", "難過"], ["cheer", "加油"]];
+const VOICE_LIST = [["zh-TW-HsiaoYuNeural", "曉雨（台灣・活潑）"], ["zh-TW-HsiaoChenNeural", "曉臻（台灣・溫柔）"],
+  ["zh-CN-XiaoyiNeural", "曉伊（可愛）"], ["zh-CN-XiaoxiaoNeural", "曉曉（自然）"], ["zh-TW-YunJheNeural", "雲哲（台灣・男聲）"]];
+const MEM_TEXT = { ace: "打出 ACE 🌟", clutch: "贏下殘局 👑", k4: "打出 4 殺 💥", mvp: "拿下全場 MVP 🏆" };
+
+function customSrcOf(sk, mood) {
+  const pack = (sk.outfits || []).find((o) => o.name === sk.outfit);
+  const files = pack ? pack.files.map((f) => pack.name + "/" + f) : (sk.files || []);
+  const pickF = (m) => files.find((f) => f.split("/").pop().replace(/\.[^.]+$/, "").toLowerCase() === m);
+  const f = pickF(mood) || pickF("happy") || pickF("default") || files[0];
+  return f ? "/custom-buddy/" + f.split("/").map(encodeURIComponent).join("/") : null;
+}
+
+async function pageRoom(el, keep = {}) {
+  const [pr, sk] = await Promise.all([api("/api/progress"), api("/api/buddy/skin")]);
+  const cfg = S.status?.settings || {};
+  const skinId = pr.skin, mood = keep.mood || "happy";
+  const isCustom = skinId === "custom";
+  const bond = pr.current_bond;
+  const bondPct = bond.next ? Math.round(((bond.points - bond.base) / (bond.next - bond.base)) * 100) : 100;
+  const stage = () => window.renderBuddy(skinId, mood, pr.equipped, { customSrc: customSrcOf(sk, mood), adjust: sk.adjust });
+  const itemCard = (it) => {
+    const on = pr.equipped.includes(it.id);
+    return `<button class="item ${it.unlocked ? "" : "locked"} ${on ? "on" : ""}" data-item="${it.id}" title="${esc(it.cond)}">
+      <div class="item-art">${window.accessoryIcon(it.id)}</div><b>${esc(it.name)}</b>
+      ${it.unlocked ? `<small>${on ? "✓ 穿戴中" : "點一下穿上"}</small>`
+        : `<small>🔒 ${esc(it.cond)}</small><div class="hbar" style="margin-top:4px"><i style="width:${Math.round((it.have / it.need) * 100)}%"></i></div>`}</button>`;
+  };
+  const adjRows = isCustom ? pr.equipped.map((id) => {
+    const a = (pr.adjust.custom || {})[id] || { x: 0, y: 0, s: 1 };
+    return `<div class="adj" data-adj="${id}"><b>${esc(window.ACCESSORY_NAMES[id] || id)}</b>
+      <label>左右<input type="range" min="-60" max="60" step="1" value="${a.x}" data-k="x"></label>
+      <label>上下<input type="range" min="-60" max="60" step="1" value="${a.y}" data-k="y"></label>
+      <label>大小<input type="range" min="0.3" max="3" step="0.05" value="${a.s}" data-k="s"></label></div>`;
+  }).join("") : "";
+
+  el.innerHTML = `
+    <div class="topbar"><h2>角色房間</h2><span class="faint">一起打越多場，角色越強、越懂你</span></div>
+    <div class="room-top">
+      <div class="room-stage"><div class="room-bot" id="roomBot">${stage()}</div>
+        <div class="chips" style="justify-content:center">${MOODS.map(([m, t]) => `<button class="chip ${m === mood ? "on" : ""}" data-mood="${m}">${t}</button>`).join("")}</div></div>
+      <div class="room-info">
+        <div class="row"><div class="lvbig">Lv.<b>${pr.level}</b></div>
+          <div style="flex:1"><div class="muted" style="font-size:12px">經驗值 ${pr.xp} / ${pr.xp_next || "MAX"}　·　累計 ${pr.total_xp} XP　·　${pr.counters.games} 場</div>
+          <div class="xpbar"><i style="width:${pr.xp_next ? Math.round((pr.xp / pr.xp_next) * 100) : 100}%"></i></div></div></div>
+        <div class="row" style="margin-top:14px"><div class="bondic">💞</div>
+          <div style="flex:1"><div class="muted" style="font-size:12px">和「${esc(window.SKINS[skinId]?.name || "角色")}」的親密度：<b style="color:var(--peach)">${esc(bond.name)}</b>
+            ${bond.next ? `（${bond.points} / ${bond.next}）` : "（已經是最高階段！）"}</div>
+          <div class="xpbar bond"><i style="width:${bondPct}%"></i></div>
+          <div class="faint" style="font-size:11px;margin-top:4px">${pr.stages.map((st, i) => `<span class="${i <= bond.index ? "win" : ""}">${st.name}</span>`).join(" → ")}</div></div></div>
+        <div class="field" style="margin-top:16px"><label>角色要怎麼叫你</label>
+          <div class="row"><input id="rNick" value="${esc(pr.nickname)}" maxlength="20" style="flex:1"><button class="btn" id="rNickSave">儲存</button></div>
+          <small>預設是你的遊戲名字，想改就改。</small></div>
+        <div class="row" style="flex-wrap:wrap">${Object.entries(window.SKINS).map(([id, k]) => `<button class="chip ${id === skinId ? "on" : ""}" data-skin="${id}">${esc(k.name)}</button>`).join("")}</div>
+      </div>
+    </div>
+
+    <div class="card section"><h3>👗 衣櫃 <span class="hint">同一個位置只能戴一個；換角色時配件各自記住</span></h3>
+      <div class="items">${pr.items.map(itemCard).join("")}</div>
+      ${isCustom && pr.equipped.length ? `<h4 style="margin:16px 0 6px">把配件對到你的圖片上</h4><div class="adjs">${adjRows}</div>` : ""}
+    </div>
+
+    ${isCustom ? `<div class="card section"><h3>🎽 自訂造型包</h3>
+      <p class="muted" style="margin-top:0;font-size:13px">在自訂圖片資料夾裡建立子資料夾，一個資料夾就是一套造型，裡面放 happy.png、wow.png、sad.png、cheer.png。
+        資料夾取名 <b>Lv10</b> 就是等級 10 解鎖，取名 <b>ACE</b> 就是打出 ACE 解鎖，其他名字直接可以穿。</p>
+      <div class="chips"><button class="chip ${!pr.outfit ? "on" : ""}" data-outfit="">基本造型</button>
+        ${pr.outfits.map((o) => `<button class="chip ${o.name === pr.outfit ? "on" : ""} ${o.unlocked ? "" : "lockedchip"}" data-outfit="${esc(o.name)}" ${o.unlocked ? "" : "disabled"}>${o.unlocked ? "" : "🔒 "}${esc(o.name)}${o.unlocked ? "" : `（${esc(o.cond)}）`}</button>`).join("")}</div>
+      <button class="btn ghost" id="rFolder" style="margin-top:10px">📂 打開自訂圖片資料夾</button></div>` : ""}
+
+    <div class="grid g2 section">
+      <div class="card"><h3>💬 對話框</h3>
+        <div class="frames">${pr.frames.map((f) => `<button class="frame-btn ${f.id === pr.frame ? "on" : ""} ${f.unlocked ? "" : "locked"}" data-frame="${f.id}" ${f.unlocked ? "" : "disabled"}>
+          <span class="bubble-mini f-${f.id}">嗨～</span><small>${f.unlocked ? esc(f.name) : "🔒 " + esc(f.cond)}</small></button>`).join("")}</div></div>
+      <div class="card"><h3>🔊 語音</h3>
+        <label class="switch"><input type="checkbox" id="vOn" ${cfg.voice_enabled !== false ? "checked" : ""}><span></span><div><b>角色說話時念出來</b></div></label>
+        <div class="row" style="margin:6px 0 10px">
+          <select id="vEngine" class="sel"><option value="edge">Edge 神經語音（自然）</option><option value="windows">Windows 內建語音</option></select>
+          <select id="vName" class="sel">${VOICE_LIST.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></div>
+        <label class="slider">語速 <input type="range" id="vRate" min="-30" max="50" value="${cfg.voice_rate ?? 5}"><span></span></label>
+        <label class="slider">音調 <input type="range" id="vPitch" min="-20" max="40" value="${cfg.voice_pitch ?? 10}"><span></span></label>
+        <label class="slider">音量 <input type="range" id="vVol" min="0" max="100" value="${cfg.voice_volume ?? 70}"><span></span></label>
+        <div class="row" style="margin-top:8px"><button class="btn" id="vSave">儲存</button><button class="btn ghost" id="vTest">▶ 試聽</button></div>
+        <div class="faint" style="font-size:12px;margin-top:6px">Edge 語音第一次會自動下載安裝（約 10 秒）。失敗時會自動改用 Windows 內建語音。</div></div>
+    </div>
+
+    <div class="grid g2 section">
+      <div class="card"><h3>📖 回憶簿 <span class="hint">你們一起經歷的高光時刻</span></h3>
+        ${pr.memories.length ? `<div class="mems">${pr.memories.slice(0, 20).map((m) => `<div class="mem">${agentImg(m.agent, "av sm")}<div>
+          <b>${MEM_TEXT[m.kind] || "高光時刻"}${m.kind === "clutch" && m.vs ? `（1v${m.vs}）` : ""}</b>
+          <div class="faint" style="font-size:12px">${esc(mapName(m.map))} · ${esc(agentName(m.agent))} · ${m.k}/${m.d}/${m.a} · ${m.t ? new Date(m.t).toLocaleDateString("zh-TW") : ""}</div></div></div>`).join("")}</div>`
+          : `<div class="faint">還沒有回憶。打出 ACE、4 殺、殘局或全場 MVP 就會記下來。</div>`}</div>
+      <div class="card"><h3>✨ 經驗值怎麼拿</h3>
+        <table><tbody>${pr.rules.map(([, t, v]) => `<tr><td>${esc(t)}</td><td class="r num win">+${v}</td></tr>`).join("")}</tbody></table>
+        <div class="faint" style="font-size:12px;margin-top:8px">輸了也有經驗，不會扣。親密度：目前的角色陪你打一場 +10，贏了 +5，ACE 再 +5。</div></div>
+    </div>`;
+
+  const rerender = (k = {}) => pageRoom(el, { mood, ...k });
+  el.querySelectorAll("[data-mood]").forEach((b) => b.onclick = () => rerender({ mood: b.dataset.mood }));
+  el.querySelectorAll("[data-skin]").forEach((b) => b.onclick = async () => { await api("/api/settings", { buddy_skin: b.dataset.skin }); await refreshStatus(); rerender(); });
+  el.querySelectorAll("[data-item]").forEach((b) => b.onclick = async () => {
+    const it = pr.items.find((x) => x.id === b.dataset.item);
+    if (!it.unlocked) return toast(`🔒 還沒解鎖：${it.cond}`);
+    await api("/api/progress/equip", { skin: skinId, item: it.id, on: !pr.equipped.includes(it.id) });
+    rerender();
+  });
+  el.querySelectorAll("[data-frame]").forEach((b) => b.onclick = async () => { await api("/api/progress/frame", { frame: b.dataset.frame }); rerender(); });
+  el.querySelectorAll("[data-outfit]").forEach((b) => b.onclick = async () => {
+    try { await api("/api/progress/outfit", { outfit: b.dataset.outfit }); rerender(); } catch (e) { toast(e.message); }
+  });
+  if ($("#rFolder", el)) $("#rFolder", el).onclick = () => api("/api/open-folder", { which: "buddy" }).then((r) => toast("資料夾：" + r.path, 4000));
+  $("#rNickSave", el).onclick = async () => { await api("/api/progress/nickname", { nickname: $("#rNick", el).value }); toast("角色記住你的名字了 💕"); };
+  // 自訂圖片的配件位置：拉動就即時預覽，放開才存
+  el.querySelectorAll("[data-adj]").forEach((row) => {
+    const id = row.dataset.adj;
+    const read = () => Object.fromEntries([...row.querySelectorAll("input")].map((i) => [i.dataset.k, +i.value]));
+    row.querySelectorAll("input").forEach((inp) => {
+      inp.oninput = () => {
+        sk.adjust = { ...(sk.adjust || {}), [id]: read() };
+        $("#roomBot", el).innerHTML = window.renderBuddy(skinId, mood, pr.equipped, { customSrc: customSrcOf(sk, mood), adjust: sk.adjust });
+      };
+      inp.onchange = () => { const v = read(); api("/api/progress/adjust", { skin: "custom", item: id, ...v }); };
+    });
+  });
+  // 語音
+  $("#vEngine", el).value = cfg.voice_engine || "edge";
+  $("#vName", el).value = cfg.voice_name || VOICE_LIST[0][0];
+  el.querySelectorAll(".slider input").forEach((i) => { const sp = i.nextElementSibling; sp.textContent = i.value; i.oninput = () => { sp.textContent = i.value; }; });
+  const saveVoice = async () => {
+    await api("/api/settings", { voice_enabled: $("#vOn", el).checked, voice_engine: $("#vEngine", el).value, voice_name: $("#vName", el).value,
+      voice_rate: +$("#vRate", el).value, voice_pitch: +$("#vPitch", el).value, voice_volume: +$("#vVol", el).value });
+    await refreshStatus();
+  };
+  $("#vSave", el).onclick = async () => { await saveVoice(); toast("語音設定已儲存 ✓"); };
+  $("#vTest", el).onclick = async () => {
+    const b = $("#vTest", el); b.disabled = true; b.textContent = "念念中…";
+    try {
+      await saveVoice();
+      const r = await api("/api/voice/test", { text: `嗨，${pr.nickname || "你"}！今天也一起加油吧！` });
+      if (r.error) toast(r.engine === "windows" ? "已用 Windows 內建語音：" + r.error : "語音失敗：" + r.error, 6000);
+      else toast(r.engine === "edge" ? "用 Edge 神經語音念的 ✓" : "用 Windows 內建語音念的 ✓");
+    } catch (e) { toast(e.message, 5000); }
+    b.disabled = false; b.textContent = "▶ 試聽";
+  };
+}
+
+function levelUpBox(ev) {
+  const wrap = document.createElement("div");
+  wrap.className = "modal";
+  const sk = S.status?.settings?.buddy_skin || "jiujiu";
+  wrap.innerHTML = `<div class="box lvup" style="max-width:420px;text-align:center">
+    <div class="confetti">${Array.from("🎉✨⭐💖🎊".repeat(4)).map((c, i) => `<span style="--i:${i}">${c}</span>`).join("")}</div>
+    <div style="width:150px;height:150px;margin:0 auto">${window.renderBuddy(sk === "custom" ? "jiujiu" : sk, "wow", [])}</div>
+    <h2 style="margin:8px 0 0">升級！Lv.${ev.level}</h2><p class="muted">一起變強了！去「角色房間」看看有沒有新配件 ✨</p>
+    <div class="row" style="justify-content:center"><button class="btn" data-go>去角色房間</button><button class="btn ghost" data-x>好</button></div></div>`;
+  wrap.querySelector("[data-go]").onclick = () => { wrap.remove(); location.hash = "#/room"; };
+  wrap.querySelector("[data-x]").onclick = () => wrap.remove();
+  document.body.appendChild(wrap);
+}
+
 /* ---------------- 路由 ---------------- */
-const ROUTES = { recap: pageRecap, overview: pageOverview, matches: pageMatches, agents: pageAgents, habits: pageHabits, live: pageLive, lineups: pageLineups, settings: pageSettings };
+const ROUTES = { room: pageRoom, recap: pageRecap, overview: pageOverview, matches: pageMatches, agents: pageAgents, habits: pageHabits, live: pageLive, lineups: pageLineups, settings: pageSettings };
 async function route() {
   const id = (location.hash.match(/^#\/(\w+)/) || [])[1] || "overview";
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.p === id));

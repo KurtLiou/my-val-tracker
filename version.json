@@ -1,6 +1,6 @@
 {
-  "version": "3.5.0",
-  "notes": "修正自動啟動、加入自動啟動診斷；包含對戰陪伴角色（3.3、3.4 的內容）",
+  "version": "4.0.0",
+  "notes": "陪伴角色養成：等級、親密度、衣櫃配件、對話框、回憶簿、AI 語音",
   "files": [
     "README.md",
     "app.py",
@@ -11,6 +11,7 @@
     "henrik.py",
     "icon.ico",
     "normalize.py",
+    "progress.py",
     "riot.py",
     "service.py",
     "static/app.js",
@@ -21,6 +22,7 @@
     "static/style.css",
     "stats.py",
     "store.py",
-    "updater.py"
+    "updater.py",
+    "voice.py"
   ]
 }
