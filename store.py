@@ -38,7 +38,8 @@ DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_co
                     "buddy_skin": "jiujiu", "buddy_size": "m", "buddy_x": None, "buddy_y": None,
                     "buddy_custom_name": "",
                     "voice_enabled": True, "voice_engine": "edge", "voice_name": "zh-TW-HsiaoYuNeural",
-                    "voice_rate": 5, "voice_pitch": 10, "voice_volume": 70}
+                    "voice_rate": 5, "voice_pitch": 10, "voice_volume": 70,
+                    "voice_clone": "", "sovits_dir": "", "sovits_port": 9880}
 
 
 def settings():
@@ -80,7 +81,13 @@ def save_settings(new):
         cur[k] = int(cur[k]) if isinstance(cur.get(k), (int, float)) else None
     cur["voice_enabled"] = bool(cur.get("voice_enabled"))
     cur["buddy_custom_name"] = str(cur.get("buddy_custom_name") or "").strip()[:16]
-    if cur.get("voice_engine") not in ("edge", "windows"):
+    cur["sovits_dir"] = str(cur.get("sovits_dir") or "").strip().strip('"').rstrip("\\/")
+    cur["voice_clone"] = str(cur.get("voice_clone") or "")[:32]
+    try:
+        cur["sovits_port"] = max(1024, min(65535, int(cur.get("sovits_port") or 9880)))
+    except (TypeError, ValueError):
+        cur["sovits_port"] = 9880
+    if cur.get("voice_engine") not in ("edge", "windows", "clone"):
         cur["voice_engine"] = "edge"
     for k, lo, hi in (("voice_rate", -30, 50), ("voice_pitch", -20, 40), ("voice_volume", 0, 100)):
         try:

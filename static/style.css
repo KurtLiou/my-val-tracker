@@ -427,3 +427,5 @@ svg text { font-family: var(--font); }
 .plines { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 10px; }
 .plines label { font-size: 12px; color: var(--dim); }
 @media (max-width: 760px) { .ptones { grid-template-columns: 1fr; } }
+.inp { background: var(--bg2); border: 1px solid var(--line); color: var(--text); padding: 9px 12px; border-radius: 12px; font: inherit; box-sizing: border-box; }
+.inp:focus { outline: 2px solid var(--lilac); border-color: transparent; }

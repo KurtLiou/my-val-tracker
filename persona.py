@@ -54,9 +54,13 @@ def load(cid):
 
 def save(cid, d):
     cur = load(cid)
-    for k in ("enabled", "name", "prompt", "tones", "address", "catchphrases", "lines"):
+    for k in ("enabled", "name", "prompt", "tones", "address", "catchphrases", "lines", "voice"):
         if k in d:
             cur[k] = d[k]
+    v = cur.get("voice") if isinstance(cur.get("voice"), dict) else {}
+    cur["voice"] = {"engine": v.get("engine") if v.get("engine") in ("default", "edge", "clone", "windows") else "default",
+                    "name": str(v.get("name") or "")[:40], "clone": str(v.get("clone") or "")[:32],
+                    "rate": max(-30, min(50, int(v.get("rate") or 0))), "pitch": max(-20, min(40, int(v.get("pitch") or 0)))}
     cur["tones"] = (list(cur["tones"]) + [""] * 4)[:4]
     cur["address"] = (list(cur["address"]) + ["{n}"] * 4)[:4]
     with open(_path(cid), "w", encoding="utf-8") as f:

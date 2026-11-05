@@ -1273,6 +1273,7 @@ async function pageRoom(el, keep = {}) {
   const skinId = pr.skin, mood = keep.mood || "happy";
   const isCustom = String(skinId).startsWith("custom:");
   const P = isCustom ? (await api("/api/persona")) : null;
+  const VL = await api("/api/voices").catch(() => ({ voices: [], sovits: {} }));
   const bond = pr.current_bond;
   const bondPct = bond.next ? Math.round(((bond.points - bond.base) / (bond.next - bond.base)) * 100) : 100;
   const stage = () => window.renderBuddy(skinId, mood, pr.equipped, { customSrc: customSrcOf(sk, mood), adjust: sk.adjust });
@@ -1349,14 +1350,37 @@ async function pageRoom(el, keep = {}) {
           <span class="bubble-mini f-${f.id}">嗨～</span><small>${f.unlocked ? esc(f.name) : "🔒 " + esc(f.cond)}</small></button>`).join("")}</div></div>
       <div class="card"><h3>🔊 語音</h3>
         <label class="switch"><input type="checkbox" id="vOn" ${cfg.voice_enabled !== false ? "checked" : ""}><span></span><div><b>角色說話時念出來</b></div></label>
-        <div class="row" style="margin:6px 0 10px">
-          <select id="vEngine" class="sel"><option value="edge">Edge 神經語音（自然）</option><option value="windows">Windows 內建語音</option></select>
-          <select id="vName" class="sel">${VOICE_LIST.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></div>
+        <div class="faint" style="font-size:12px;margin:8px 0 4px">預設聲音（啾啾和沒有設定專屬聲音的角色都用這個）</div>
+        <div class="row" style="margin:0 0 10px">${voiceSelect("vPick", VL.voices, false)}</div>
         <label class="slider">語速 <input type="range" id="vRate" min="-30" max="50" value="${cfg.voice_rate ?? 5}"><span></span></label>
         <label class="slider">音調 <input type="range" id="vPitch" min="-20" max="40" value="${cfg.voice_pitch ?? 10}"><span></span></label>
         <label class="slider">音量 <input type="range" id="vVol" min="0" max="100" value="${cfg.voice_volume ?? 70}"><span></span></label>
+        ${isCustom ? `<h4 style="margin:14px 0 6px">${esc(sk.custom_name || "這個角色")}的專屬聲音</h4>
+        <div class="row" style="margin:0 0 8px">${voiceSelect("cvPick", VL.voices, true)}</div>
+        <div id="cvSliders"><label class="slider">語速 <input type="range" id="cvRate" min="-30" max="50" value="${P.persona.voice?.rate ?? 0}"><span></span></label>
+        <label class="slider">音調 <input type="range" id="cvPitch" min="-20" max="40" value="${P.persona.voice?.pitch ?? 0}"><span></span></label></div>` : ""}
         <div class="row" style="margin-top:8px"><button class="btn" id="vSave">儲存</button><button class="btn ghost" id="vTest">▶ 試聽</button></div>
-        <div class="faint" style="font-size:12px;margin-top:6px">Edge 語音第一次會自動下載安裝（約 10 秒）。失敗時會自動改用 Windows 內建語音。</div></div>
+        <div class="faint" style="font-size:12px;margin-top:6px">失敗時會自動退回：我的聲音 → Edge 神經語音 → Windows 內建語音。俄文一律用俄文語音念。音調只對 Edge 語音有效。</div></div>
+    </div>
+
+    <div class="card section"><h3>🎙️ 我的聲音（聲音複製） <span class="hint">用你自己的聲音念角色的台詞</span></h3>
+      <p class="muted" style="margin-top:0;font-size:13px">只能放你自己、或本人明確同意的聲音（例如問過爸媽）。不要放聲優、藝人或其他人的聲音。聲音只存在你的電腦，不會上傳。</p>
+      <div class="grid g2">
+        <div><h4 style="margin:0 0 6px">① GPT-SoVITS 位置</h4>
+          <div class="row"><input id="svDir" class="inp" style="flex:1" placeholder="例如 D:\\GPT-SoVITS-v4-20250422fix" value="${esc(cfg.sovits_dir || "")}"><button class="btn ghost" id="svSave">儲存</button></div>
+          <div id="svStat" class="faint" style="font-size:13px;margin-top:6px"></div>
+          <div class="row" style="margin-top:6px"><button class="btn ghost" id="svStart">啟動</button><button class="btn ghost" id="svStop">停止</button></div></div>
+        <div><h4 style="margin:0 0 6px">② 新增一段錄音（5～10 秒）</h4>
+          <div class="row"><input id="nvName" class="inp" placeholder="名字，例如：我" style="width:120px">
+            <select id="nvLang" class="sel"><option value="zh">中文</option><option value="en">英文</option><option value="ja">日文</option><option value="yue">粵語</option></select></div>
+          <textarea id="nvText" class="inp" rows="2" style="width:100%;margin-top:6px" placeholder="錄音裡講的每一個字（一字不差，標點也打上）"></textarea>
+          <div class="row" style="margin-top:6px"><input type="file" id="nvFile" accept=".wav,.mp3,.m4a,.flac,.ogg,audio/*"><button class="btn" id="nvAdd">加入</button></div></div>
+      </div>
+      <h4 style="margin:14px 0 6px">聲音庫</h4>
+      ${VL.voices.length ? `<table><tbody>${VL.voices.map((v) => `<tr><td><b>${esc(v.name)}</b>${v.seconds ? ` <span class="faint">${v.seconds} 秒${v.seconds < 3 || v.seconds > 10 ? "（建議 3～10 秒）" : ""}</span>` : ""}
+        <div class="faint" style="font-size:12px">「${esc(v.text)}」</div></td>
+        <td class="r"><button class="btn ghost small" data-vtest="${v.id}">▶ 試聽</button> <button class="btn ghost small" data-vdel="${v.id}" style="color:var(--loss)">刪除</button></td></tr>`).join("")}</tbody></table>`
+        : `<div class="faint">還沒有錄音。用手機或電腦錄一段 5～10 秒、安靜環境、正常語氣的話，再打上逐字稿就好。</div>`}
     </div>
 
     <div class="grid g2 section">
@@ -1424,25 +1448,85 @@ async function pageRoom(el, keep = {}) {
     });
   });
   // 語音
-  $("#vEngine", el).value = cfg.voice_engine || "edge";
-  $("#vName", el).value = cfg.voice_name || VOICE_LIST[0][0];
+  const pickVal = (sel) => { const [engine, ...rest] = $(sel, el).value.split(":"); const v = rest.join(":");
+    return { engine, name: engine === "edge" ? v : "", clone: engine === "clone" ? v : "" }; };
+  $("#vPick", el).value = cfg.voice_engine === "clone" && cfg.voice_clone ? "clone:" + cfg.voice_clone
+    : cfg.voice_engine === "windows" ? "windows" : "edge:" + (cfg.voice_name || VOICE_LIST[0][0]);
+  if (!$("#vPick", el).value) $("#vPick", el).value = "edge:" + VOICE_LIST[0][0];
+  if (isCustom) {
+    const cv = P.persona.voice || {};
+    $("#cvPick", el).value = cv.engine === "clone" ? "clone:" + cv.clone : cv.engine === "edge" ? "edge:" + cv.name : cv.engine === "windows" ? "windows" : "default";
+    if (!$("#cvPick", el).value) $("#cvPick", el).value = "default";
+    const tog = () => { $("#cvSliders", el).style.display = $("#cvPick", el).value === "default" ? "none" : ""; };
+    $("#cvPick", el).onchange = tog; tog();
+  }
   el.querySelectorAll(".slider input").forEach((i) => { const sp = i.nextElementSibling; sp.textContent = i.value; i.oninput = () => { sp.textContent = i.value; }; });
   const saveVoice = async () => {
-    await api("/api/settings", { voice_enabled: $("#vOn", el).checked, voice_engine: $("#vEngine", el).value, voice_name: $("#vName", el).value,
-      voice_rate: +$("#vRate", el).value, voice_pitch: +$("#vPitch", el).value, voice_volume: +$("#vVol", el).value });
+    const g = pickVal("#vPick");
+    const patch = { voice_enabled: $("#vOn", el).checked, voice_engine: g.engine,
+      voice_rate: +$("#vRate", el).value, voice_pitch: +$("#vPitch", el).value, voice_volume: +$("#vVol", el).value };
+    if (g.engine === "edge") patch.voice_name = g.name;
+    if (g.engine === "clone") patch.voice_clone = g.clone;
+    await api("/api/settings", patch);
+    if (isCustom) {
+      const c = pickVal("#cvPick");
+      P.persona.voice = { ...c, rate: +$("#cvRate", el).value, pitch: +$("#cvPitch", el).value };
+      await api("/api/persona", { char: P.char, persona: { voice: P.persona.voice } });
+    }
     await refreshStatus();
   };
-  $("#vSave", el).onclick = async () => { await saveVoice(); toast("語音設定已儲存 ✓"); };
-  $("#vTest", el).onclick = async () => {
-    const b = $("#vTest", el); b.disabled = true; b.textContent = "念念中…";
+  const ENG = { clone: "我的聲音", edge: "Edge 神經語音", windows: "Windows 內建語音" };
+  const testVoice = async (btn, override) => {
+    const t = btn.textContent; btn.disabled = true; btn.textContent = "念念中…";
     try {
-      await saveVoice();
-      const r = await api("/api/voice/test", { text: `嗨，${pr.nickname || "你"}！今天也一起加油吧！` });
-      if (r.error) toast(r.engine === "windows" ? "已用 Windows 內建語音：" + r.error : "語音失敗：" + r.error, 6000);
-      else toast(r.engine === "edge" ? "用 Edge 神經語音念的 ✓" : "用 Windows 內建語音念的 ✓");
+      const r = await fetch("/api/voice/test", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: `嗨，${pr.nickname || "你"}！今天也一起加油吧！`, voice: override }) }).then((x) => x.json());
+      if (!r.engine) toast("語音失敗：" + (r.error || "未知原因"), 6000);
+      else if (r.error) toast(r.error, 7000);
+      else toast(`用${ENG[r.engine] || r.engine}念的 ✓`);
     } catch (e) { toast(e.message, 5000); }
-    b.disabled = false; b.textContent = "▶ 試聽";
+    btn.disabled = false; btn.textContent = t;
   };
+  $("#vSave", el).onclick = async () => { await saveVoice(); toast("語音設定已儲存 ✓"); };
+  $("#vTest", el).onclick = async () => { await saveVoice(); testVoice($("#vTest", el)); };
+  // 我的聲音
+  const svShow = (st) => {
+    $("#svStat", el).innerHTML = !st.dir ? "還沒設定資料夾" : !st.dir_ok ? "⚠️ 這個資料夾裡找不到 api_v2.py，請選解壓縮後的那一層"
+      : !st.python_ok ? "⚠️ 找不到 runtime\\python.exe，請用官方 Windows 整合包"
+      : st.running ? `✅ 正在執行（port ${st.port}）` : st.starting ? "⏳ 啟動中…（第一次約 30 秒～2 分鐘）"
+      : st.error ? "⚠️ " + esc(st.error) : "已就緒，要用的時候會自動啟動";
+  };
+  svShow(VL.sovits || {});
+  const svPoll = async (n = 0) => { const v = await api("/api/voices"); svShow(v.sovits); if (!v.sovits.running && (v.sovits.starting || n < 3) && n < 70 && el.isConnected) setTimeout(() => svPoll(n + 1), 2000); };
+  $("#svSave", el).onclick = async () => { await api("/api/settings", { sovits_dir: $("#svDir", el).value }); await refreshStatus(); svShow((await api("/api/voices")).sovits); toast("已儲存 ✓"); };
+  $("#svStart", el).onclick = async () => { await api("/api/settings", { sovits_dir: $("#svDir", el).value }); svShow(await api("/api/sovits/start", {})); svPoll(); };
+  $("#svStop", el).onclick = async () => { await api("/api/sovits/stop", {}); setTimeout(() => svPoll(5), 800); };
+  $("#nvAdd", el).onclick = () => {
+    const file = $("#nvFile", el).files[0];
+    if (!file) return toast("先選一個錄音檔");
+    if (!$("#nvText", el).value.trim()) return toast("請打上錄音裡講的每一個字");
+    const rd = new FileReader();
+    rd.onload = async () => {
+      try {
+        await api("/api/voices/add", { name: $("#nvName", el).value || "我的聲音", text: $("#nvText", el).value, lang: $("#nvLang", el).value, filename: file.name, data: rd.result });
+        toast("已加入聲音庫 ✓ 按「▶ 試聽」看看像不像"); rerender();
+      } catch (e) { toast("加入失敗：" + e.message, 5000); }
+    };
+    rd.readAsDataURL(file);
+  };
+  el.querySelectorAll("[data-vtest]").forEach((b) => b.onclick = () => testVoice(b, { engine: "clone", clone: b.dataset.vtest, rate: 0 }));
+  el.querySelectorAll("[data-vdel]").forEach((b) => b.onclick = async () => {
+    if (!confirm("確定刪除這段錄音？")) return;
+    await api("/api/voices/delete", { id: b.dataset.vdel }); await refreshStatus(); rerender();
+  });
+}
+
+function voiceSelect(id, clones, withDefault) {
+  return `<select id="${id}" class="sel" style="flex:1">
+    ${withDefault ? `<option value="default">跟預設聲音一樣</option>` : ""}
+    ${clones.length ? `<optgroup label="🎙️ 我的聲音（GPT-SoVITS）">${clones.map((v) => `<option value="clone:${v.id}">${esc(v.name)}</option>`).join("")}</optgroup>` : ""}
+    <optgroup label="Edge 神經語音">${VOICE_LIST.map(([v, t]) => `<option value="edge:${v}">${t}</option>`).join("")}</optgroup>
+    <option value="windows">Windows 內建語音</option></select>`;
 }
 
 function levelUpBox(ev) {

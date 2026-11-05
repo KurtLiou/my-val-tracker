@@ -307,6 +307,12 @@ def start_match():
     _ensure_loop()
     with _lock:
         _state["active"] = True
+    try:  # 用「我的聲音」的話，先在背景把 GPT-SoVITS 叫起來，第一句才不會等太久
+        import voice
+        if store.settings().get("voice_enabled") and voice.resolve_voice()["engine"] == "clone":
+            threading.Thread(target=voice.start_sovits, daemon=True).start()
+    except Exception:
+        pass
     say(persona_line("cheer", "開打囉！啾啾陪你 ✨"), "cheer")
     open_window()
 

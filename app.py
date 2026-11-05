@@ -138,6 +138,10 @@ class Handler(BaseHTTPRequestHandler):
                                "frame": f["frame"], "level": f["level"],
                                "outfits": store.char_outfits(cid) if cid else [], "outfit": f.get("outfit")})
 
+        if path == "/api/voices":
+            return self._json({"voices": voice.list_voices(), "sovits": voice.sovits_status(),
+                               "edge": [{"id": v, "name": n} for v, n in voice.VOICES]})
+
         if path == "/api/persona":
             cid = q.get("char") or store.current_char()
             if not cid:
@@ -276,7 +280,34 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
 
         if path == "/api/voice/test":
-            return self._json(voice.speak(str(body.get("text") or "嗨～我是你的陪伴角色！今天也一起加油吧！"), wait=True))
+            text = str(body.get("text") or "嗨～我是你的陪伴角色！今天也一起加油吧！")
+            return self._json(voice.speak(text, wait=True, override=body.get("voice")))
+
+        if path == "/api/voices/add":  # 上傳你自己的錄音（聲音複製用）
+            data = str(body.get("data") or "")
+            if "," not in data or not data.startswith("data:"):
+                return self._json({"error": "錄音格式不對"})
+            raw = base64.b64decode(data.split(",", 1)[1])
+            if len(raw) > 20 * 1024 * 1024:
+                return self._json({"error": "錄音太大（上限 20MB，5～10 秒就夠了）"})
+            if not str(body.get("text") or "").strip():
+                return self._json({"error": "請打上錄音裡講的每一個字（逐字稿）"})
+            ext = os.path.splitext(str(body.get("filename") or ""))[1] or ".wav"
+            return self._json({"voice": voice.add_voice(body.get("name"), body.get("text"), body.get("lang") or "zh", raw, ext)})
+
+        if path == "/api/voices/delete":
+            voice.delete_voice(body.get("id"))
+            if store.settings().get("voice_clone") == body.get("id"):
+                store.save_settings({"voice_clone": "", "voice_engine": "edge"})
+            return self._json({"ok": True})
+
+        if path == "/api/sovits/start":
+            threading.Thread(target=voice.start_sovits, kwargs={"wait": True}, daemon=True).start()
+            return self._json(voice.sovits_status())
+
+        if path == "/api/sovits/stop":
+            voice.stop_sovits()
+            return self._json({"ok": True})
 
         if path == "/api/buddy/upload":  # 在角色房間上傳表情圖
             data = str(body.get("data") or "")
