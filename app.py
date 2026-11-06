@@ -139,7 +139,7 @@ class Handler(BaseHTTPRequestHandler):
                                "outfits": store.char_outfits(cid) if cid else [], "outfit": f.get("outfit")})
 
         if path == "/api/voices":
-            return self._json({"voices": voice.list_voices(), "sovits": voice.sovits_status(),
+            return self._json({"voices": voice.list_voices(), "sovits": voice.sovits_status(), "trained": voice.trained_models(),
                                "edge": [{"id": v, "name": n} for v, n in voice.VOICES]})
 
         if path == "/api/persona":
@@ -294,6 +294,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "請打上錄音裡講的每一個字（逐字稿）"})
             ext = os.path.splitext(str(body.get("filename") or ""))[1] or ".wav"
             return self._json({"voice": voice.add_voice(body.get("name"), body.get("text"), body.get("lang") or "zh", raw, ext)})
+
+        if path == "/api/voices/model":  # 接上 / 拿掉微調訓練好的模型
+            try:
+                return self._json({"meta": voice.set_voice_model(body.get("id"), body.get("gpt"), body.get("sovits"))})
+            except ValueError as e:
+                return self._json({"error": str(e)})
 
         if path == "/api/voices/delete":
             voice.delete_voice(body.get("id"))

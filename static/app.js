@@ -1378,7 +1378,11 @@ async function pageRoom(el, keep = {}) {
       </div>
       <h4 style="margin:14px 0 6px">聲音庫</h4>
       ${VL.voices.length ? `<table><tbody>${VL.voices.map((v) => `<tr><td><b>${esc(v.name)}</b>${v.seconds ? ` <span class="faint">${v.seconds} 秒${v.seconds < 3 || v.seconds > 10 ? "（建議 3～10 秒）" : ""}</span>` : ""}
-        <div class="faint" style="font-size:12px">「${esc(v.text)}」</div></td>
+        <div class="faint" style="font-size:12px">「${esc(v.text)}」</div>
+        <div class="row" style="margin:6px 0 0;gap:6px;font-size:12px"><span class="faint">模型</span>
+          <select class="sel" data-vgpt="${v.id}" style="max-width:180px"><option value="">GPT：通用</option>${(VL.trained?.gpt || []).map((m) => `<option value="${esc(m.path)}" ${m.path === v.gpt ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
+          <select class="sel" data-vsov="${v.id}" style="max-width:180px"><option value="">SoVITS：通用</option>${(VL.trained?.sovits || []).map((m) => `<option value="${esc(m.path)}" ${m.path === v.sovits ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
+          ${v.gpt || v.sovits ? `<span class="tag" style="color:var(--win)">✓ 用訓練好的模型</span>` : ""}</div></td>
         <td class="r"><button class="btn ghost small" data-vtest="${v.id}">▶ 試聽</button> <button class="btn ghost small" data-vdel="${v.id}" style="color:var(--loss)">刪除</button></td></tr>`).join("")}</tbody></table>`
         : `<div class="faint">還沒有錄音。用手機或電腦錄一段 5～10 秒、安靜環境、正常語氣的話，再打上逐字稿就好。</div>`}
     </div>
@@ -1515,6 +1519,13 @@ async function pageRoom(el, keep = {}) {
     rd.readAsDataURL(file);
   };
   el.querySelectorAll("[data-vtest]").forEach((b) => b.onclick = () => testVoice(b, { engine: "clone", clone: b.dataset.vtest, rate: 0 }));
+  const saveModel = async (vid) => {
+    try {
+      await api("/api/voices/model", { id: vid, gpt: el.querySelector(`[data-vgpt="${vid}"]`).value, sovits: el.querySelector(`[data-vsov="${vid}"]`).value });
+      toast("模型設定好了 ✓ 按「▶ 試聽」聽聽看（第一次載入模型要等一下）"); rerender();
+    } catch (e) { toast("設定失敗：" + e.message, 5000); }
+  };
+  el.querySelectorAll("[data-vgpt],[data-vsov]").forEach((s) => s.onchange = () => saveModel(s.dataset.vgpt || s.dataset.vsov));
   el.querySelectorAll("[data-vdel]").forEach((b) => b.onclick = async () => {
     if (!confirm("確定刪除這段錄音？")) return;
     await api("/api/voices/delete", { id: b.dataset.vdel }); await refreshStatus(); rerender();

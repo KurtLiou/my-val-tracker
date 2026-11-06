@@ -1,6 +1,6 @@
 {
-  "version": "4.3.2",
-  "notes": "用你自己的聲音念台詞（GPT-SoVITS 聲音複製）、每個角色專屬聲音、自動找到 GPT-SoVITS 資料夾",
+  "version": "4.4.0",
+  "notes": "聲音庫可以接上微調訓練好的 GPT-SoVITS 模型，聲音更像你",
   "files": [
     "README.md",
     "app.py",

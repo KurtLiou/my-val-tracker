@@ -120,7 +120,8 @@ def list_voices():
         meta = store._read(os.path.join(d, "meta.json"), {})
         ref = next((f for f in os.listdir(d) if f.startswith("ref") and f.lower().endswith(AUDIO_EXTS)), None)
         out.append({"id": vid, "name": meta.get("name") or vid, "text": meta.get("text", ""),
-                    "lang": meta.get("lang", "zh"), "ref": ref, "seconds": meta.get("seconds")})
+                    "lang": meta.get("lang", "zh"), "ref": ref, "seconds": meta.get("seconds"),
+                    "gpt": meta.get("gpt", ""), "sovits": meta.get("sovits", "")})
     return out
 
 
@@ -146,6 +147,42 @@ def add_voice(name, text, lang, data, ext):
             "lang": lang if lang in ("zh", "en", "ja", "ko", "yue") else "zh", "seconds": secs}
     store._write(os.path.join(d, "meta.json"), meta)
     return {"id": vid, **meta}
+
+
+def set_voice_model(vid, gpt="", sovits=""):
+    """幫聲音接上微調訓練好的模型（GPT .ckpt + SoVITS .pth）；兩個都空 = 用通用模型（零樣本）。"""
+    d = _vdir(vid)
+    meta = store._read(os.path.join(d, "meta.json"), {})
+    for k, v, ext in (("gpt", gpt, ".ckpt"), ("sovits", sovits, ".pth")):
+        v = str(v or "").strip()
+        if v and (not v.lower().endswith(ext) or not os.path.exists(v)):
+            raise ValueError(f"找不到模型檔：{v}")
+        meta[k] = v
+    store._write(os.path.join(d, "meta.json"), meta)
+    return meta
+
+
+def trained_models():
+    """列出 GPT-SoVITS 資料夾裡訓練好的模型（GPT_weights*/*.ckpt、SoVITS_weights*/*.pth）。"""
+    d = sovits_dir()
+    out = {"gpt": [], "sovits": []}
+    if not d or not os.path.isdir(d):
+        return out
+    for sub in sorted(os.listdir(d)):
+        full = os.path.join(d, sub)
+        if not os.path.isdir(full):
+            continue
+        kind = "gpt" if sub.startswith("GPT_weights") else "sovits" if sub.startswith("SoVITS_weights") else None
+        if not kind:
+            continue
+        ext = ".ckpt" if kind == "gpt" else ".pth"
+        for f in sorted(os.listdir(full)):
+            if f.lower().endswith(ext):
+                fp = os.path.join(full, f)
+                out[kind].append({"path": fp, "name": f, "mtime": os.path.getmtime(fp)})
+    for k in out:
+        out[k].sort(key=lambda x: -x["mtime"])
+    return out
 
 
 def delete_voice(vid):
@@ -255,6 +292,7 @@ def start_sovits(wait=False):
 
 
 def restart_sovits():
+    _sovits["loaded"] = ("", "")
     stop_sovits()
     try:
         urllib.request.urlopen(f"http://127.0.0.1:{sovits_port()}/control?command=exit", timeout=5)
@@ -273,14 +311,39 @@ def stop_sovits():
         p.terminate()
 
 
+def _load_weights(v):
+    """讓 GPT-SoVITS 載入這個聲音的模型；沒有專屬模型就回到通用模型。"""
+    want = (v.get("gpt") or "", v.get("sovits") or "")
+    have = _sovits.get("loaded", ("", ""))
+    if want == have:
+        return
+    if not any(want):  # 換回通用模型：重開服務最簡單（會讀回預設設定）
+        restart_sovits()
+        _sovits["loaded"] = ("", "")
+        return
+    base = f"http://127.0.0.1:{sovits_port()}"
+    for ep, wp in (("set_gpt_weights", want[0]), ("set_sovits_weights", want[1])):
+        if not wp:
+            continue
+        try:
+            with urllib.request.urlopen(f"{base}/{ep}?" + urllib.parse.urlencode({"weights_path": wp}), timeout=120) as r:
+                r.read()
+        except urllib.error.HTTPError as e:
+            raise RuntimeError("載入訓練好的模型失敗：" + e.read().decode("utf-8", "ignore")[:150]) from None
+    _sovits["loaded"] = want
+
+
 def _sovits_file(text, vid, speed=1.0):
     ref, v = voice_ref(vid)
-    key = hashlib.md5(f"sovits|{vid}|{speed}|{text}".encode()).hexdigest()
+    key = hashlib.md5(f"sovits|{vid}|{v.get('gpt')}|{v.get('sovits')}|{speed}|{text}".encode()).hexdigest()
     path = os.path.join(TTS_DIR, key + ".wav")
     if os.path.exists(path):
         return path
-    if not sovits_running() and not start_sovits(wait=True):
-        raise RuntimeError(_sovits["error"] or "GPT-SoVITS 沒有在跑")
+    if not sovits_running():
+        _sovits["loaded"] = ("", "")
+        if not start_sovits(wait=True):
+            raise RuntimeError(_sovits["error"] or "GPT-SoVITS 沒有在跑")
+    _load_weights(v)
     q = {"text": text, "text_lang": "zh", "ref_audio_path": ref, "prompt_text": v["text"],
          "prompt_lang": v["lang"], "media_type": "wav", "streaming_mode": "false",
          "speed_factor": str(speed), "text_split_method": "cut5"}
