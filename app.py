@@ -281,7 +281,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/voice/test":
             text = str(body.get("text") or "嗨～我是你的陪伴角色！今天也一起加油吧！")
-            return self._json(voice.speak(text, wait=True, override=body.get("voice")))
+            ov = body.get("voice")
+            if voice.speak_lang(ov) == "ja":  # 日文模式：翻成日文念（沒設定 AI 就念固定的日文測試句）
+                import buddy
+                ja = buddy.to_japanese(text) or voice.JA_TEST
+                r = voice.speak(ja, wait=True, override=ov, lang="ja", alt_text=text)
+                r["spoken"] = ja
+                return self._json(r)
+            return self._json(voice.speak(text, wait=True, override=ov))
 
         if path == "/api/voices/add":  # 上傳你自己的錄音（聲音複製用）
             data = str(body.get("data") or "")

@@ -39,7 +39,7 @@ DEFAULT_SETTINGS = {"henrik_key": "", "riot_id": "", "youtube_key": "", "sync_co
                     "buddy_custom_name": "",
                     "voice_enabled": True, "voice_engine": "edge", "voice_name": "zh-TW-HsiaoYuNeural",
                     "voice_rate": 5, "voice_pitch": 10, "voice_volume": 70,
-                    "voice_clone": "", "sovits_dir": "", "sovits_port": 9880}
+                    "voice_clone": "", "sovits_dir": "", "sovits_port": 9880, "voice_lang": "zh"}
 
 
 def settings():
@@ -83,6 +83,8 @@ def save_settings(new):
     cur["buddy_custom_name"] = str(cur.get("buddy_custom_name") or "").strip()[:16]
     cur["sovits_dir"] = str(cur.get("sovits_dir") or "").strip().strip('"').rstrip("\\/")
     cur["voice_clone"] = str(cur.get("voice_clone") or "")[:32]
+    if cur.get("voice_lang") not in ("zh", "ja"):
+        cur["voice_lang"] = "zh"
     try:
         cur["sovits_port"] = max(1024, min(65535, int(cur.get("sovits_port") or 9880)))
     except (TypeError, ValueError):

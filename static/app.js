@@ -1351,12 +1351,14 @@ async function pageRoom(el, keep = {}) {
       <div class="card"><h3>🔊 語音</h3>
         <label class="switch"><input type="checkbox" id="vOn" ${cfg.voice_enabled !== false ? "checked" : ""}><span></span><div><b>角色說話時念出來</b></div></label>
         <div class="faint" style="font-size:12px;margin:8px 0 4px">預設聲音（啾啾和沒有設定專屬聲音的角色都用這個）</div>
-        <div class="row" style="margin:0 0 10px">${voiceSelect("vPick", VL.voices, false)}</div>
+        <div class="row" style="margin:0 0 10px">${voiceSelect("vPick", VL.voices, false)}
+          <select id="vLang" class="sel" title="字幕一律是中文"><option value="zh">念中文</option><option value="ja" ${cfg.voice_lang === "ja" ? "selected" : ""}>念日文（字幕中文）</option></select></div>
         <label class="slider">語速 <input type="range" id="vRate" min="-30" max="50" value="${cfg.voice_rate ?? 5}"><span></span></label>
         <label class="slider">音調 <input type="range" id="vPitch" min="-20" max="40" value="${cfg.voice_pitch ?? 10}"><span></span></label>
         <label class="slider">音量 <input type="range" id="vVol" min="0" max="100" value="${cfg.voice_volume ?? 70}"><span></span></label>
         ${isCustom ? `<h4 style="margin:14px 0 6px">${esc(sk.custom_name || "這個角色")}的專屬聲音</h4>
-        <div class="row" style="margin:0 0 8px">${voiceSelect("cvPick", VL.voices, true)}</div>
+        <div class="row" style="margin:0 0 8px">${voiceSelect("cvPick", VL.voices, true)}
+          <select id="cvLang" class="sel"><option value="">語言跟預設</option><option value="zh" ${P.persona.voice?.lang === "zh" ? "selected" : ""}>念中文</option><option value="ja" ${P.persona.voice?.lang === "ja" ? "selected" : ""}>念日文（字幕中文）</option></select></div>
         <div id="cvSliders"><label class="slider">語速 <input type="range" id="cvRate" min="-30" max="50" value="${P.persona.voice?.rate ?? 0}"><span></span></label>
         <label class="slider">音調 <input type="range" id="cvPitch" min="-20" max="40" value="${P.persona.voice?.pitch ?? 0}"><span></span></label></div>` : ""}
         <div class="row" style="margin-top:8px"><button class="btn" id="vSave">儲存</button><button class="btn ghost" id="vTest">▶ 試聽</button></div>
@@ -1467,14 +1469,14 @@ async function pageRoom(el, keep = {}) {
   el.querySelectorAll(".slider input").forEach((i) => { const sp = i.nextElementSibling; sp.textContent = i.value; i.oninput = () => { sp.textContent = i.value; }; });
   const saveVoice = async () => {
     const g = pickVal("#vPick");
-    const patch = { voice_enabled: $("#vOn", el).checked, voice_engine: g.engine,
+    const patch = { voice_enabled: $("#vOn", el).checked, voice_engine: g.engine, voice_lang: $("#vLang", el).value,
       voice_rate: +$("#vRate", el).value, voice_pitch: +$("#vPitch", el).value, voice_volume: +$("#vVol", el).value };
     if (g.engine === "edge") patch.voice_name = g.name;
     if (g.engine === "clone") patch.voice_clone = g.clone;
     await api("/api/settings", patch);
     if (isCustom) {
       const c = pickVal("#cvPick");
-      P.persona.voice = { ...c, rate: +$("#cvRate", el).value, pitch: +$("#cvPitch", el).value };
+      P.persona.voice = { ...c, rate: +$("#cvRate", el).value, pitch: +$("#cvPitch", el).value, lang: $("#cvLang", el).value };
       await api("/api/persona", { char: P.char, persona: { voice: P.persona.voice } });
     }
     await refreshStatus();
@@ -1487,7 +1489,7 @@ async function pageRoom(el, keep = {}) {
         body: JSON.stringify({ text: `嗨，${pr.nickname || "你"}！今天也一起加油吧！`, voice: override }) }).then((x) => x.json());
       if (!r.engine) toast("語音失敗：" + (r.error || "未知原因"), 6000);
       else if (r.error) toast(r.error, 7000);
-      else toast(`用${ENG[r.engine] || r.engine}念的 ✓`);
+      else toast(`用${ENG[r.engine] || r.engine}念的 ✓${r.spoken ? "（日文：" + r.spoken + "）" : ""}`, r.spoken ? 6000 : 2500);
     } catch (e) { toast(e.message, 5000); }
     btn.disabled = false; btn.textContent = t;
   };
@@ -1518,7 +1520,7 @@ async function pageRoom(el, keep = {}) {
     };
     rd.readAsDataURL(file);
   };
-  el.querySelectorAll("[data-vtest]").forEach((b) => b.onclick = () => testVoice(b, { engine: "clone", clone: b.dataset.vtest, rate: 0 }));
+  el.querySelectorAll("[data-vtest]").forEach((b) => b.onclick = async () => { await saveVoice(); testVoice(b, { engine: "clone", clone: b.dataset.vtest, rate: 0, lang: $("#vLang", el).value }); });
   const saveModel = async (vid) => {
     try {
       await api("/api/voices/model", { id: vid, gpt: el.querySelector(`[data-vgpt="${vid}"]`).value, sovits: el.querySelector(`[data-vsov="${vid}"]`).value });

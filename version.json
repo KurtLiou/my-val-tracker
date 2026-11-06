@@ -1,6 +1,6 @@
 {
-  "version": "4.4.0",
-  "notes": "聲音庫可以接上微調訓練好的 GPT-SoVITS 模型，聲音更像你",
+  "version": "4.5.0",
+  "notes": "語音可以切換念日文（字幕維持中文），每個角色可分開設定",
   "files": [
     "README.md",
     "app.py",

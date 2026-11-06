@@ -42,6 +42,8 @@ VOICES = [
     ("zh-TW-YunJheNeural", "雲哲（台灣・男聲）"),
 ]
 RU_VOICE = "ru-RU-SvetlanaNeural"
+JA_VOICE = "ja-JP-NanamiNeural"
+JA_TEST = "やっほー！今日も一緒に頑張ろうね！"
 AUDIO_EXTS = (".wav", ".mp3", ".m4a", ".flac", ".ogg")
 
 _speaking = threading.Lock()
@@ -333,9 +335,9 @@ def _load_weights(v):
     _sovits["loaded"] = want
 
 
-def _sovits_file(text, vid, speed=1.0):
+def _sovits_file(text, vid, speed=1.0, text_lang="zh"):
     ref, v = voice_ref(vid)
-    key = hashlib.md5(f"sovits|{vid}|{v.get('gpt')}|{v.get('sovits')}|{speed}|{text}".encode()).hexdigest()
+    key = hashlib.md5(f"sovits|{vid}|{v.get('gpt')}|{v.get('sovits')}|{speed}|{text_lang}|{text}".encode()).hexdigest()
     path = os.path.join(TTS_DIR, key + ".wav")
     if os.path.exists(path):
         return path
@@ -344,7 +346,7 @@ def _sovits_file(text, vid, speed=1.0):
         if not start_sovits(wait=True):
             raise RuntimeError(_sovits["error"] or "GPT-SoVITS 沒有在跑")
     _load_weights(v)
-    q = {"text": text, "text_lang": "zh", "ref_audio_path": ref, "prompt_text": v["text"],
+    q = {"text": text, "text_lang": text_lang, "ref_audio_path": ref, "prompt_text": v["text"],
          "prompt_lang": v["lang"], "media_type": "wav", "streaming_mode": "false",
          "speed_factor": str(speed), "text_split_method": "cut5"}
     url = f"http://127.0.0.1:{sovits_port()}/tts?" + urllib.parse.urlencode(q)
@@ -356,7 +358,7 @@ def _sovits_file(text, vid, speed=1.0):
         if "codec" in msg and not _sovits.get("utf8_retry"):
             _sovits["utf8_retry"] = True  # 舊的 GPT-SoVITS 不是用 UTF-8 開的：關掉重開一次
             restart_sovits()
-            return _sovits_file(text, vid, speed)
+            return _sovits_file(text, vid, speed, text_lang)
         raise RuntimeError("GPT-SoVITS 合成失敗：" + msg[:150]) from None
     except urllib.error.URLError as e:
         raise RuntimeError(f"連不上 GPT-SoVITS：{e.reason}") from None
@@ -438,8 +440,23 @@ def resolve_voice(override=None):
     return base
 
 
-def speak(text, wait=False, override=None):
-    """念出一句話。回傳用了哪個引擎；wait=True 時會等念完（測試按鈕用）。"""
+def speak_lang(override=None):
+    """語音要念中文還是日文（字幕一律中文）。角色可以有自己的設定，沒有就用全域設定。"""
+    lang = store.settings().get("voice_lang") or "zh"
+    vc = override
+    if vc is None:
+        cid = store.current_char()
+        if cid:
+            import persona
+            vc = persona.load(cid).get("voice") or {}
+    if vc and vc.get("lang") in ("zh", "ja"):
+        lang = vc["lang"]
+    return lang if lang in ("zh", "ja") else "zh"
+
+
+def speak(text, wait=False, override=None, lang="zh", alt_text=None):
+    """念出一句話。lang="ja" 時 text 是日文；alt_text 是中文原句（Windows 內建語音沒有日文時改念它）。
+    回傳用了哪個引擎；wait=True 時會等念完（測試按鈕用）。"""
     cfg = store.settings()
     if os.name != "nt":
         return {"engine": None, "error": "語音只支援 Windows"}
@@ -461,21 +478,21 @@ def speak(text, wait=False, override=None):
             if vc["engine"] in ("clone", "edge"):
                 try:
                     files = []
-                    for lang, t in segs:
-                        if lang == "ru":  # 俄文一律用俄文神經語音
+                    for seg_lang, t in segs:
+                        if seg_lang == "ru":  # 俄文一律用俄文神經語音
                             if edge_ok is None:
                                 edge_ok = ensure_edge_tts()
                             if edge_ok:
                                 files.append(_edge_file(t, vc, RU_VOICE))
                         elif vc["engine"] == "clone" and vc.get("clone"):
                             speed = max(0.6, min(1.6, 1 + int(vc.get("rate") or 0) / 100))
-                            files.append(_sovits_file(t, vc["clone"], speed))
+                            files.append(_sovits_file(t, vc["clone"], speed, lang))
                         else:
                             if edge_ok is None:
                                 edge_ok = ensure_edge_tts()
                             if not edge_ok:
                                 raise RuntimeError(_install_state.get("error") or "Edge 語音無法使用")
-                            files.append(_edge_file(t, vc))
+                            files.append(_edge_file(t, vc, JA_VOICE if lang == "ja" else None))
                     _trim_cache()
                     if files:
                         _ps(_PS_PLAY, {"VT_FILES": "|".join(files), "VT_VOL": str(vol / 100)}, wait=True)
@@ -484,7 +501,12 @@ def speak(text, wait=False, override=None):
                     err = f"{'我的聲音' if vc['engine'] == 'clone' else 'Edge 語音'}失敗，改用 Windows 內建語音（{e}）"
             rate = max(-10, min(10, round(int(vc.get("rate") or 0) / 10)))
             ru_i = iter(alts)
-            payload = [{"lang": lang, "text": t, "alt": next(ru_i, "") if lang == "ru" else ""} for lang, t in segs]
+            if lang == "ja" and alt_text:  # Windows 內建語音通常沒有日文：改念中文原句
+                sapi_segs = persona.speech(alt_text) or [("zh", alt_text)]
+                ru_i = iter([m.group(3) or "" for m in persona.RU_SEG.finditer(alt_text)])
+            else:
+                sapi_segs = segs
+            payload = [{"lang": lg, "text": t, "alt": next(ru_i, "") if lg == "ru" else ""} for lg, t in sapi_segs]
             _ps(_PS_SAPI, {"VT_SEGS": json.dumps(payload, ensure_ascii=False), "VT_RATE": str(rate), "VT_VOL": str(vol)}, wait=True)
             return {"engine": "windows", "error": err}
         finally:

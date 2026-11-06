@@ -60,7 +60,8 @@ def save(cid, d):
     v = cur.get("voice") if isinstance(cur.get("voice"), dict) else {}
     cur["voice"] = {"engine": v.get("engine") if v.get("engine") in ("default", "edge", "clone", "windows") else "default",
                     "name": str(v.get("name") or "")[:40], "clone": str(v.get("clone") or "")[:32],
-                    "rate": max(-30, min(50, int(v.get("rate") or 0))), "pitch": max(-20, min(40, int(v.get("pitch") or 0)))}
+                    "rate": max(-30, min(50, int(v.get("rate") or 0))), "pitch": max(-20, min(40, int(v.get("pitch") or 0))),
+                    "lang": v.get("lang") if v.get("lang") in ("zh", "ja") else ""}
     cur["tones"] = (list(cur["tones"]) + [""] * 4)[:4]
     cur["address"] = (list(cur["address"]) + ["{n}"] * 4)[:4]
     with open(_path(cid), "w", encoding="utf-8") as f:

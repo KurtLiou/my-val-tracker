@@ -118,6 +118,8 @@ def _parse(text):
         try:
             d = json.loads(m.group(0))
             line = str(d.get("line") or "").strip()
+            if line and str(d.get("ja") or "").strip():
+                _ja_cache_put(line[:40], str(d["ja"]).strip()[:120])
             if line:
                 ok = allowed_moods()[0]
                 return line[:40], d.get("mood") if d.get("mood") in ok else "happy"
@@ -125,6 +127,84 @@ def _parse(text):
             pass
     line = (text or "").strip().strip('"').splitlines()[0] if text and text.strip() else ""
     return (line[:40] or random.choice(OFFLINE_LINES["cheer"])), "happy"
+
+
+# ---------------- 日文語音（字幕中文、語音日文） ----------------
+_JA_FILE = os.path.join(store.ROOT, "ja_lines.json")
+_ja_mem = None
+JA_ASK = '\n另外：語音要用日文念。請在 JSON 多加一個 "ja" 欄位，放同一句話自然口語的日文（俄文單字保留原樣），"line" 仍然是繁體中文字幕。'
+
+
+def _ja_cache():
+    global _ja_mem
+    if _ja_mem is None:
+        _ja_mem = store._read(_JA_FILE, {})
+    return _ja_mem
+
+
+def _ja_cache_put(zh, ja):
+    c = _ja_cache()
+    c[zh] = ja
+    if len(c) > 2000:
+        for k in list(c)[:500]:
+            c.pop(k, None)
+    try:
+        store._write(_JA_FILE, c)
+    except Exception:
+        pass
+
+
+def _ja_wanted():
+    try:
+        import voice
+        return store.settings().get("voice_enabled") and voice.speak_lang() == "ja"
+    except Exception:
+        return False
+
+
+def to_japanese(zh):
+    """中文台詞 → 日文（給語音念）。先查快取，沒有就請 AI 翻；沒設定 AI 或失敗就回傳 None。"""
+    if zh in _ja_cache():
+        return _ja_cache()[zh]
+    cfg = store.settings()
+    provider, key = cfg.get("buddy_provider"), cfg.get("buddy_key")
+    if provider not in ("gemini", "claude") or not key:
+        return None
+    sys_p = "把使用者給的一句繁體中文台詞翻成自然口語的日文，保留語氣和 emoji，俄文單字保留原樣。只回傳日文本身。"
+    try:
+        if provider == "gemini":
+            model = cfg.get("buddy_model") or "gemini-2.5-flash"
+            r = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                      {"x-goog-api-key": key}, {
+                          "system_instruction": {"parts": [{"text": sys_p}]},
+                          "contents": [{"parts": [{"text": zh}]}],
+                          "generationConfig": {"maxOutputTokens": 120, "temperature": 0.3,
+                                               "thinkingConfig": {"thinkingBudget": 0}}}, timeout=15)
+            parts = ((r.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
+            ja = parts[0].get("text", "")
+        else:
+            model = cfg.get("buddy_model") or "claude-haiku-5-5"
+            r = _post("https://api.anthropic.com/v1/messages", {"x-api-key": key, "anthropic-version": "2023-06-01"},
+                      {"model": model, "max_tokens": 120, "system": sys_p,
+                       "messages": [{"role": "user", "content": zh}]}, timeout=15)
+            ja = "".join(c.get("text", "") for c in r.get("content") or [])
+    except Exception:
+        return None
+    ja = (ja or "").strip().strip('"「」')
+    if ja:
+        _ja_cache_put(zh, ja)
+    return ja or None
+
+
+def speak_line(line, wait=False, override=None):
+    """依設定念出一句台詞：日文模式就念日文版（翻不出來就念中文）。"""
+    import voice
+    lang = voice.speak_lang(override)
+    if lang == "ja":
+        ja = to_japanese(line)
+        if ja:
+            return voice.speak(ja, wait=wait, override=override, lang="ja", alt_text=line)
+    return voice.speak(line, wait=wait, override=override)
 
 
 def _persona_ctx():
@@ -148,6 +228,8 @@ def ask_ai(cfg, img_b64):
         sys_prompt = persona.system_prompt(p, stage, nick)
         mem = "\n".join(l for l in rel_ctx.splitlines() if l.startswith("你們的共同回憶"))
         user = f"{mem}\n可用表情：{mood_txt}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
+        if _ja_wanted():
+            user += JA_ASK
         return _call_ai(cfg, img_b64, sys_prompt, user)
     try:
         import progress
@@ -162,6 +244,8 @@ def ask_ai(cfg, img_b64):
     who = (_p.load(cid).get("name") if cid else "") or "啾啾"
     rel = f"這次你的名字是「{who}」（不是啾啾的話就用這個名字自稱）。\n" + rel
     user = f"{rel}\n可用表情：{mood_txt}\n\n這是玩家現在的畫面。最近說過：{recent}。給一句新的話。"
+    if _ja_wanted():
+        user += JA_ASK
     return _call_ai(cfg, img_b64, SYSTEM_PROMPT, user)
 
 
@@ -174,7 +258,7 @@ def _call_ai(cfg, img_b64, system_prompt, user):
                       "system_instruction": {"parts": [{"text": system_prompt}]},
                       "contents": [{"parts": [{"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
                                               {"text": user}]}],
-                      "generationConfig": {"maxOutputTokens": 120, "temperature": 1.0,
+                      "generationConfig": {"maxOutputTokens": 200, "temperature": 1.0,
                                            "responseMimeType": "application/json",
                                            "thinkingConfig": {"thinkingBudget": 0}},
                   })
@@ -184,7 +268,7 @@ def _call_ai(cfg, img_b64, system_prompt, user):
         model = cfg.get("buddy_model") or "claude-haiku-5-5"
         r = _post("https://api.anthropic.com/v1/messages",
                   {"x-api-key": key, "anthropic-version": "2023-06-01"}, {
-                      "model": model, "max_tokens": 120, "system": system_prompt,
+                      "model": model, "max_tokens": 200, "system": system_prompt,
                       "messages": [{"role": "user", "content": [
                           {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
                           {"type": "text", "text": user}]}],
@@ -234,11 +318,14 @@ def say(line, mood="happy", speak=True):
         _history.append(line)
         del _history[:-10]
     if speak and store.settings().get("voice_enabled") and state()["active"]:
-        try:
-            import voice
-            voice.speak(line)
-        except Exception:
-            pass
+        threading.Thread(target=lambda: _quiet(speak_line, line), daemon=True).start()
+
+
+def _quiet(fn, *a):
+    try:
+        fn(*a)
+    except Exception:
+        pass
 
 
 def one_cycle():
