@@ -234,6 +234,7 @@ def start_sovits(wait=False):
         log = open(os.path.join(store.ROOT, "sovits.log"), "ab")
         _sovits["proc"] = subprocess.Popen(
             [py, "api_v2.py", "-a", "127.0.0.1", "-p", str(sovits_port())], cwd=d, stdout=log, stderr=log,
+            env={**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"},  # 繁中 Windows 預設 cp950，印日文字會當掉
             creationflags=NO_WINDOW if os.name == "nt" else 0)
         _sovits["error"] = None
     if not wait:
@@ -251,6 +252,19 @@ def start_sovits(wait=False):
         return False
     finally:
         _sovits["starting"] = False
+
+
+def restart_sovits():
+    stop_sovits()
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{sovits_port()}/control?command=exit", timeout=5)
+    except Exception:
+        pass
+    for _ in range(20):
+        if not sovits_running():
+            break
+        time.sleep(0.5)
+    return start_sovits(wait=True)
 
 
 def stop_sovits():
@@ -275,7 +289,12 @@ def _sovits_file(text, vid, speed=1.0):
         with urllib.request.urlopen(url, timeout=60) as r:
             data = r.read()
     except urllib.error.HTTPError as e:
-        raise RuntimeError("GPT-SoVITS 合成失敗：" + e.read().decode("utf-8", "ignore")[:150]) from None
+        msg = e.read().decode("utf-8", "ignore")
+        if "codec" in msg and not _sovits.get("utf8_retry"):
+            _sovits["utf8_retry"] = True  # 舊的 GPT-SoVITS 不是用 UTF-8 開的：關掉重開一次
+            restart_sovits()
+            return _sovits_file(text, vid, speed)
+        raise RuntimeError("GPT-SoVITS 合成失敗：" + msg[:150]) from None
     except urllib.error.URLError as e:
         raise RuntimeError(f"連不上 GPT-SoVITS：{e.reason}") from None
     with open(path + ".part", "wb") as f:
