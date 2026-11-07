@@ -1385,7 +1385,7 @@ async function pageRoom(el, keep = {}) {
           <select class="sel" data-vgpt="${v.id}" style="max-width:180px"><option value="">GPT：通用</option>${(VL.trained?.gpt || []).map((m) => `<option value="${esc(m.path)}" ${m.path === v.gpt ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
           <select class="sel" data-vsov="${v.id}" style="max-width:180px"><option value="">SoVITS：通用</option>${(VL.trained?.sovits || []).map((m) => `<option value="${esc(m.path)}" ${m.path === v.sovits ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select>
           ${v.gpt || v.sovits ? `<span class="tag" style="color:var(--win)">✓ 用訓練好的模型</span>` : ""}</div></td>
-        <td class="r"><button class="btn ghost small" data-vtest="${v.id}">▶ 試聽</button> <button class="btn ghost small" data-vdel="${v.id}" style="color:var(--loss)">刪除</button></td></tr>`).join("")}</tbody></table>`
+        <td class="r"><button class="btn ghost small" data-vtest="${v.id}" data-vlang="${v.lang === "ja" ? "ja" : "zh"}">▶ 試聽</button> <button class="btn ghost small" data-vdel="${v.id}" style="color:var(--loss)">刪除</button></td></tr>`).join("")}</tbody></table>`
         : `<div class="faint">還沒有錄音。用手機或電腦錄一段 5～10 秒、安靜環境、正常語氣的話，再打上逐字稿就好。</div>`}
     </div>
 
@@ -1520,7 +1520,7 @@ async function pageRoom(el, keep = {}) {
     };
     rd.readAsDataURL(file);
   };
-  el.querySelectorAll("[data-vtest]").forEach((b) => b.onclick = async () => { await saveVoice(); testVoice(b, { engine: "clone", clone: b.dataset.vtest, rate: 0, lang: $("#vLang", el).value }); });
+  el.querySelectorAll("[data-vtest]").forEach((b) => b.onclick = async () => { await saveVoice(); testVoice(b, { engine: "clone", clone: b.dataset.vtest, rate: 0, lang: b.dataset.vlang }); });
   const saveModel = async (vid) => {
     try {
       await api("/api/voices/model", { id: vid, gpt: el.querySelector(`[data-vgpt="${vid}"]`).value, sovits: el.querySelector(`[data-vsov="${vid}"]`).value });
