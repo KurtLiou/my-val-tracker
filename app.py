@@ -282,10 +282,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/voice/test":
             text = str(body.get("text") or "嗨～我是你的陪伴角色！今天也一起加油吧！")
             ov = body.get("voice")
-            if voice.speak_lang(ov) == "ja":  # 日文模式：翻成日文念（沒設定 AI 就念固定的日文測試句）
+            import re as _re0
+            if voice.speak_lang(ov) == "ja" or _re0.search(r"[\u3040-\u30ff]", text):  # 日文模式，或打的是日文：翻成日文念（沒設定 AI 就念固定的日文測試句）
                 import buddy
-                ja = buddy.to_japanese(text) or voice.JA_TEST
-                r = voice.speak(ja, wait=True, override=ov, lang="ja", alt_text=text)
+                import re as _re
+                if _re.search(r"[\u3040-\u30ff]", text):  # 打的本來就是日文（有假名）就直接念
+                    ja, text = text, ""
+                else:
+                    ja = buddy.to_japanese(text) or voice.JA_TEST
+                r = voice.speak(ja, wait=True, override=ov, lang="ja", alt_text=text or None)
                 r["spoken"] = ja
                 return self._json(r)
             return self._json(voice.speak(text, wait=True, override=ov))

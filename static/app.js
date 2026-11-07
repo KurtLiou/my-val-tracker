@@ -1379,6 +1379,7 @@ async function pageRoom(el, keep = {}) {
           <div class="row" style="margin-top:6px"><input type="file" id="nvFile" accept=".wav,.mp3,.m4a,.flac,.ogg,audio/*"><button class="btn" id="nvAdd">加入</button></div></div>
       </div>
       <h4 style="margin:14px 0 6px">聲音庫</h4>
+      <div class="row" style="margin:0 0 8px"><input id="vTestText" class="inp" style="flex:1" placeholder="試聽台詞：想聽她說什麼就打在這裡（中文或日文都可以，空白就用預設句）"></div>
       ${VL.voices.length ? `<table><tbody>${VL.voices.map((v) => `<tr><td><b>${esc(v.name)}</b>${v.seconds ? ` <span class="faint">${v.seconds} 秒${v.seconds < 3 || v.seconds > 10 ? "（建議 3～10 秒）" : ""}</span>` : ""}
         <div class="faint" style="font-size:12px">「${esc(v.text)}」</div>
         <div class="row" style="margin:6px 0 0;gap:6px;font-size:12px"><span class="faint">模型</span>
@@ -1486,7 +1487,7 @@ async function pageRoom(el, keep = {}) {
     const t = btn.textContent; btn.disabled = true; btn.textContent = "念念中…";
     try {
       const r = await fetch("/api/voice/test", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `嗨，${pr.nickname || "你"}！今天也一起加油吧！`, voice: override }) }).then((x) => x.json());
+        body: JSON.stringify({ text: ($("#vTestText", el)?.value || "").trim() || `嗨，${pr.nickname || "你"}！今天也一起加油吧！`, voice: override }) }).then((x) => x.json());
       if (!r.engine) toast("語音失敗：" + (r.error || "未知原因"), 6000);
       else if (r.error) toast(r.error, 7000);
       else toast(`用${ENG[r.engine] || r.engine}念的 ✓${r.spoken ? "（日文：" + r.spoken + "）" : ""}`, r.spoken ? 6000 : 2500);

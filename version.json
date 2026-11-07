@@ -1,6 +1,6 @@
 {
-  "version": "4.5.2",
-  "notes": "GPT-SoVITS 位置欄位會顯示自動找到的資料夾，空白時不會被存掉",
+  "version": "4.5.3",
+  "notes": "試聽可以自己打台詞（中文會翻成日文念，日文直接念）",
   "files": [
     "README.md",
     "app.py",
