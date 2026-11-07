@@ -1369,7 +1369,7 @@ async function pageRoom(el, keep = {}) {
       <p class="muted" style="margin-top:0;font-size:13px">只能放你自己、或本人明確同意的聲音（例如問過爸媽）。不要放聲優、藝人或其他人的聲音。聲音只存在你的電腦，不會上傳。</p>
       <div class="grid g2">
         <div><h4 style="margin:0 0 6px">① GPT-SoVITS 位置</h4>
-          <div class="row"><input id="svDir" class="inp" style="flex:1" placeholder="例如 D:\\GPT-SoVITS-v4-20250422fix" value="${esc(cfg.sovits_dir || "")}"><button class="btn ghost" id="svSave">儲存</button></div>
+          <div class="row"><input id="svDir" class="inp" style="flex:1" placeholder="例如 D:\\GPT-SoVITS-v4-20250422fix" value="${esc(cfg.sovits_dir || VL.sovits?.dir || "")}"><button class="btn ghost" id="svSave">儲存</button></div>
           <div id="svStat" class="faint" style="font-size:13px;margin-top:6px"></div>
           <div class="row" style="margin-top:6px"><button class="btn ghost" id="svStart">啟動</button><button class="btn ghost" id="svStop">停止</button></div></div>
         <div><h4 style="margin:0 0 6px">② 新增一段錄音（5～10 秒）</h4>
@@ -1504,7 +1504,7 @@ async function pageRoom(el, keep = {}) {
   };
   svShow(VL.sovits || {});
   const svPoll = async (n = 0) => { const v = await api("/api/voices"); svShow(v.sovits); if (!v.sovits.running && (v.sovits.starting || n < 3) && n < 70 && el.isConnected) setTimeout(() => svPoll(n + 1), 2000); };
-  $("#svSave", el).onclick = async () => { await api("/api/settings", { sovits_dir: $("#svDir", el).value }); await refreshStatus(); svShow((await api("/api/voices")).sovits); toast("已儲存 ✓"); };
+  $("#svSave", el).onclick = async () => { if (!$("#svDir", el).value.trim()) return toast("請貼上 GPT-SoVITS 資料夾的位置"); await api("/api/settings", { sovits_dir: $("#svDir", el).value }); await refreshStatus(); svShow((await api("/api/voices")).sovits); toast("已儲存 ✓"); };
   $("#svStart", el).onclick = async () => { await api("/api/settings", { sovits_dir: $("#svDir", el).value }); svShow(await api("/api/sovits/start", {})); svPoll(); };
   $("#svStop", el).onclick = async () => { await api("/api/sovits/stop", {}); setTimeout(() => svPoll(5), 800); };
   $("#nvAdd", el).onclick = () => {

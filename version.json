@@ -1,6 +1,6 @@
 {
-  "version": "4.5.1",
-  "notes": "聲音庫的試聽改用錄音本身的語言（日文錄音就念日文）",
+  "version": "4.5.2",
+  "notes": "GPT-SoVITS 位置欄位會顯示自動找到的資料夾，空白時不會被存掉",
   "files": [
     "README.md",
     "app.py",
