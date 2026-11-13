@@ -435,6 +435,8 @@ def preview(port=None, seconds=45):
 
 
 # ---------------- 小視窗（在獨立的程式裡跑：app.py --buddy） ----------------
+KEY_RGB = (1, 2, 3)  # 透明用的「去背色」，幾乎是黑色，邊緣就算有一點殘留也只是很細的深色描邊
+KEY_HEX = "#010203"
 def _make_click_through(title, clickthrough):
     if os.name != "nt":
         return
@@ -449,16 +451,19 @@ def _make_click_through(title, clickthrough):
         return
     GWL_EXSTYLE = -20
     style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-    style |= 0x08000000 | 0x00000080  # WS_EX_NOACTIVATE：不搶遊戲焦點；WS_EX_TOOLWINDOW：不出現在工作列
+    style |= 0x08000000 | 0x00000080 | 0x00080000  # NOACTIVATE（不搶焦點）+ TOOLWINDOW（不上工作列）+ LAYERED
     if clickthrough:
-        style |= 0x00080000 | 0x00000020  # WS_EX_LAYERED + WS_EX_TRANSPARENT：滑鼠穿透
+        style |= 0x00000020  # WS_EX_TRANSPARENT：滑鼠穿透
     user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-    if clickthrough:
-        user32.SetLayeredWindowAttributes(hwnd, 0, 245, 2)  # LWA_ALPHA
+    # 像 Bongo Cat 一樣：背景色（KEY_RGB）整片變透明，只看得到角色和泡泡
+    r, g, b = KEY_RGB
+    user32.SetLayeredWindowAttributes(hwnd, r | (g << 8) | (b << 16), 0, 1)  # LWA_COLORKEY
     user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)  # HWND_TOPMOST, 不移動不縮放不啟用
 
 
 def window_main():
+    # 讓 Edge WebView2 的網頁背景變透明（預設是白色，就是那個白色長方形）
+    os.environ["WEBVIEW2_DEFAULT_BACKGROUND_COLOR"] = "0"
     import webview
 
     port = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--port=")), "8787")
@@ -481,7 +486,7 @@ def window_main():
             win.destroy()
 
     kwargs = dict(width=w, height=h, x=x, y=y, frameless=True, on_top=True, resizable=False,
-                  transparent=True, background_color="#0e1220", easy_drag=False, focus=setup,
+                  transparent=True, background_color=KEY_HEX, easy_drag=False, focus=setup,
                   js_api=Api())
     url = f"http://127.0.0.1:{port}/static/buddy.html" + ("?setup=1" if setup else "")
     try:
